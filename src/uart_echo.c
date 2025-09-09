@@ -47,7 +47,7 @@ void uart_echo_task(void *arg) {
             ESP_LOGI(TAG, "Recibido: %s", (char *) data);
             //uart_write_bytes(UART_PORT, (const char *) data, len); // Eco de lo recibido
 
-            //------modificado-----
+            // --- LÓGICA DE PARSEO ---
             char *cmd_token = strtok((char *)data, " ");
             if (cmd_token != NULL && strcmp(cmd_token, "PULSOS") == 0) {
                 

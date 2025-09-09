@@ -84,6 +84,8 @@ void execute_movement(int num_pulses, int frequency, int direction) {
     // 6. Detener la generación de pulsos
     ESP_ERROR_CHECK(ledc_set_duty(LEDC_MODE, LEDC_CHANNEL, 0));
     ESP_ERROR_CHECK(ledc_update_duty(LEDC_MODE, LEDC_CHANNEL));
+
+    gpio_set_level(LEDC_DIRECTION_IO, 0);
     
     ESP_LOGI(TAG, "Movimiento finalizado.");
 }

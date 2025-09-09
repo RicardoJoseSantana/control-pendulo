@@ -1,33 +1,36 @@
+// src/main.c
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
-#include "uart_echo.h"
-#include "pwm_generator.h" // Incluimos nuestra nueva cabecera PWM
 
-#include "pulse_counter.h" // <-- ¡INCLUIMOS NUESTRO NUEVO MÓDULO!
-
-#include "button_handler.h" //para usar el boton boot
-
-#include "nvs_flash.h" // trabajar memoria no volatil
+// 1. Inclusión de todas las cabeceras de los módulos
+#include "nvs_flash.h"      // Para la memoria no volátil
+#include "uart_echo.h"      // Para la tarea de comandos UART
+#include "pwm_generator.h"  // Para la tarea de control del motor
+#include "pulse_counter.h"  // Para la tarea de lectura del encoder
+#include "button_handler.h" // Para la tarea de lectura del botón
 
 void app_main(void) {
-
+    // 2. Inicialización de servicios globales (primero que nada)
+    // Es crucial inicializar la partición de la NVS antes de que cualquier tarea intente usarla.
     esp_err_t ret = nvs_flash_init();
     if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
-      // Si la NVS está corrupta o es una nueva versión, se borra y se reinicializa.
       ESP_ERROR_CHECK(nvs_flash_erase());
       ret = nvs_flash_init();
     }
     ESP_ERROR_CHECK(ret);
 
-    // Creamos la tarea del eco UART
+    // 3. Creación de todas las tareas de la aplicación
+    // Cada tarea se ejecutará de forma independiente y concurrente.
+
+    // Tarea para manejar los comandos recibidos por el puerto serie
     xTaskCreate(uart_echo_task, "uart_echo_task", configMINIMAL_STACK_SIZE * 3, NULL, 5, NULL);
 
-    // Creamos la tarea del generador PWM
+    // Tarea que espera comandos en la cola y mueve el motor
     xTaskCreate(pwm_generator_task, "pwm_generator_task", configMINIMAL_STACK_SIZE * 3, NULL, 5, NULL);
 
-    // Creamos la nueva tarea del contador de pulsos
+    // Tarea que inicializa el PCNT y reporta la posición del encoder para depuración
     xTaskCreate(pulse_counter_task, "pulse_counter_task", configMINIMAL_STACK_SIZE * 3, NULL, 5, NULL);
 
-    // --- AÑADIDO: Creamos la nueva tarea para el botón ---
+    // Tarea que monitorea el botón BOOT y envía comandos de "repetir"
     xTaskCreate(button_handler_task, "button_handler_task", configMINIMAL_STACK_SIZE * 3, NULL, 5, NULL);
 }

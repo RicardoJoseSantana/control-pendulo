@@ -15,7 +15,7 @@
 typedef struct {
     int num_pulses;
     int frequency;
-    char direction; // 'I' para Izquierda, 'D' para Derecha
+    int direction; // 'I' para Izquierda, 'D' para Derecha
 } pwm_command_t;
 
 // Variable externa para la cola de comandos

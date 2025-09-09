@@ -1,111 +1,111 @@
 // src/pulse_counter.c
-
-#include "pulse_counter.h" // Incluimos nuestra propia cabecera
+#include "pulse_counter.h"
 #include <stdio.h>
-#include <stdbool.h> // --- AÑADIDO --- Para usar 'bool'
+#include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "driver/pcnt.h"
 #include "driver/gpio.h"
 #include "esp_log.h"
-#include "esp_intr_alloc.h"
 
-// --- Definiciones privadas del módulo ---
-#define PULSE_GPIO_A GPIO_NUM_27 // --- RENOMBRADO --- Pin para la señal A del encoder
-#define PULSE_GPIO_B GPIO_NUM_14 // --- AÑADIDO --- Pin para la señal B del encoder
-#define PULSE_GPIO_Z GPIO_NUM_12 // --- AÑADIDO --- Pin para la señal Z (índice) del encoder
+// --- CONFIGURACIÓN DE PINES (Tus pines específicos) ---
+#define PCNT_INPUT_A_PIN    27 // Fase A del encoder
+#define PCNT_INPUT_B_PIN    14 // Fase B del encoder
+#define ENCODER_INDEX_Z_PIN 12 // Fase Z (índice) del encoder
 
-static const char *TAG = "PULSE_COUNTER";
-
-// --- Definición de la variableS globalES ---
-// Esta es la definición real de la variable declarada como 'extern' en el .h
-volatile int g_pulse_count = 0;
-volatile bool g_z_pulse_detected = false; // --- AÑADIDO ---
-
-// --- Funciones privadas del módulo ---
+#define PCNT_UNIT           PCNT_UNIT_0
+static const char *TAG = "PULSE_COUNTER_PCNT";
 
 /**
- * @brief Rutina de servicio de interrupción (ISR).
- *  ISR para el canal A. Ahora determina la dirección.
- * Se ejecuta cada vez que se detecta un flanco de subida en el GPIO A.
- * ¡Debe ser lo más rápida posible!
+ * @brief ISR para la señal Z. Resetea el contador del PCNT a cero.
  */
-static void IRAM_ATTR gpio_isr_handler_A(void *arg)
-{
-    // Leemos el estado del canal B en el instante exacto del flanco de A
-    if (gpio_get_level(PULSE_GPIO_B) == 0)
-    {
-        // Si B es BAJO, giramos en una dirección (ej. horario)
-        g_pulse_count++;
-    }
-    else
-    {
-        // Si B es ALTO, giramos en la dirección opuesta (ej. anti-horario)
-        g_pulse_count--;
-    }
+static void IRAM_ATTR encoder_index_z_isr_handler(void* arg) {
+    pcnt_counter_clear(PCNT_UNIT);
 }
 
 /**
- * @brief --- AÑADIDO --- ISR para el canal Z. Solo establece un flag.
- * Se ejecuta cada vez que se detecta un flanco de subida en el GPIO Z.
+ * @brief Inicializa el PCNT en modo cuadratura y la interrupción de la señal Z.
  */
-static void IRAM_ATTR gpio_isr_handler_Z(void *arg)
-{
-    g_z_pulse_detected = true;
-}
-
-/**
- * @brief Función principal de la tarea de conteo de pulsos.
- */
-void pulse_counter_task(void *arg)
-{
-    ESP_LOGI(TAG, "Iniciando tarea de contador de pulsos en GPIOs A:%d, B:%d, Z:%d", PULSE_GPIO_A, PULSE_GPIO_B, PULSE_GPIO_Z);
-
-    // 1. Configuración de los 3 pines GPIO
-    gpio_config_t io_conf = {
-        .mode = GPIO_MODE_INPUT,                                                                    // Todos son pines de entrada
-        .pin_bit_mask = ((1ULL << PULSE_GPIO_A) | (1ULL << PULSE_GPIO_B) | (1ULL << PULSE_GPIO_Z)), // Máscara para los 3 pines
-        .pull_down_en = GPIO_PULLDOWN_DISABLE,
-        .pull_up_en = GPIO_PULLUP_ENABLE, // Habilitar pull-up interno para todos
-        .intr_type = GPIO_INTR_POSEDGE,   // Interrupción en flanco de subida para A y Z
+static void pcnt_and_z_index_init(void) {
+    // Configuración para el Canal 0 (Fase A como pulso, Fase B como dirección)
+    pcnt_config_t pcnt_config_ch0 = {
+        .pulse_gpio_num = PCNT_INPUT_A_PIN,
+        .ctrl_gpio_num = PCNT_INPUT_B_PIN,
+        .channel = PCNT_CHANNEL_0,
+        .unit = PCNT_UNIT,
+        .pos_mode = PCNT_COUNT_DEC,
+        .neg_mode = PCNT_COUNT_INC,
+        .lctrl_mode = PCNT_MODE_REVERSE,
+        .hctrl_mode = PCNT_MODE_KEEP,
     };
-    gpio_config(&io_conf);
+    pcnt_unit_config(&pcnt_config_ch0);
 
-    // El pin B no necesita interrupción, solo lo leemos. La deshabilitamos para él.
-    gpio_set_intr_type(PULSE_GPIO_B, GPIO_INTR_DISABLE);
+    // Configuración para el Canal 1 (Fase B como pulso, Fase A como dirección)
+    pcnt_config_t pcnt_config_ch1 = {
+        .pulse_gpio_num = PCNT_INPUT_B_PIN,
+        .ctrl_gpio_num = PCNT_INPUT_A_PIN,
+        .channel = PCNT_CHANNEL_1,
+        .unit = PCNT_UNIT,
+        .pos_mode = PCNT_COUNT_INC,
+        .neg_mode = PCNT_COUNT_DEC,
+        .lctrl_mode = PCNT_MODE_REVERSE,
+        .hctrl_mode = PCNT_MODE_KEEP,
+    };
+    pcnt_unit_config(&pcnt_config_ch1);
 
-    // 2. Instalar el servicio de interrupción del GPIO (una sola vez por aplicación)
-    // Usamos ESP_INTR_FLAG_IRAM para que la ISR se ejecute desde la RAM, siendo más rápida.
-    gpio_install_isr_service(ESP_INTR_FLAG_IRAM);
+    // Configurar pull-up para los pines de entrada
+    gpio_set_pull_mode(PCNT_INPUT_A_PIN, GPIO_PULLUP_ONLY);
+    gpio_set_pull_mode(PCNT_INPUT_B_PIN, GPIO_PULLUP_ONLY);
 
-    // 3. Agregar el manejador de interrupción para nuestroS pinES específicoS
-    gpio_isr_handler_add(PULSE_GPIO_A, gpio_isr_handler_A, (void *)PULSE_GPIO_A);
-    gpio_isr_handler_add(PULSE_GPIO_Z, gpio_isr_handler_Z, (void *)PULSE_GPIO_Z);
+    // Habilitar filtro de ruido de hardware
+    pcnt_set_filter_value(PCNT_UNIT, 100);
+    pcnt_filter_enable(PCNT_UNIT);
+    
+    // Iniciar el contador
+    pcnt_counter_pause(PCNT_UNIT);
+    pcnt_counter_clear(PCNT_UNIT);
+    pcnt_counter_resume(PCNT_UNIT);
 
-    ESP_LOGI(TAG, "Configuracion completa. Esperando pulsos...");
+    // Configurar la interrupción para la señal Z
+    gpio_config_t z_pin_config = {
+        .pin_bit_mask = (1ULL << ENCODER_INDEX_Z_PIN),
+        .mode = GPIO_MODE_INPUT,
+        .pull_up_en = GPIO_PULLUP_ENABLE,
+        .intr_type = GPIO_INTR_POSEDGE
+    };
+    gpio_config(&z_pin_config);
 
-    int last_pulse_count = 0; // Para detectar cambios
+    gpio_install_isr_service(0);
+    gpio_isr_handler_add(ENCODER_INDEX_Z_PIN, encoder_index_z_isr_handler, NULL);
 
-    // Bucle principal de la tarea
-    while (1)
-    {
-        // --- MODIFICADO --- Lógica del bucle principal
+    ESP_LOGI(TAG, "PCNT en modo cuadratura (pines A:%d, B:%d) y señal Z (pin:%d) inicializados.", 
+             PCNT_INPUT_A_PIN, PCNT_INPUT_B_PIN, ENCODER_INDEX_Z_PIN);
+}
 
-        // Comprobamos si el pulso de índice ha sido detectado por la ISR
-        if (g_z_pulse_detected)
-        {
-            ESP_LOGW(TAG, "¡Pulso de INDICE (Z) detectado! Reseteando contador a CERO. Valor anterior: %d", g_pulse_count);
-            g_pulse_count = 0;
-            g_z_pulse_detected = false; // Importante: Limpiamos el flag después de procesarlo
-            last_pulse_count = 0;
+/**
+ * @brief Obtiene el valor actual del contador del PCNT.
+ */
+int16_t pulse_counter_get_value(void) {
+    int16_t count = 0;
+    pcnt_get_counter_value(PCNT_UNIT, &count);
+    return count;
+}
+
+/**
+ * @brief Tarea principal del módulo para inicialización y depuración.
+ */
+void pulse_counter_task(void *arg) {
+    pcnt_and_z_index_init();
+
+    // Este bucle solo sirve para depuración.
+    int16_t last_value = 0;
+    while (1) {
+        int16_t current_value = pulse_counter_get_value();
+        if(current_value != last_value) {
+            ESP_LOGI(TAG, "Posición del Encoder: %d", current_value);
+            last_value = current_value;
         }
-
-        // Imprimimos la posición solo si ha cambiado, para no saturar la consola
-        if (g_pulse_count != last_pulse_count)
-        {
-            ESP_LOGI(TAG, "Posicion actual: %d", g_pulse_count);
-            last_pulse_count = g_pulse_count;
-        }
-
-        // Dormimos la tarea por un breve periodo para ceder la CPU
+        // Gira el encoder. Deberías ver los valores cambiar entre -2048 y 2047 aprox.,
+        // y resetearse a 0 al pasar por la señal Z. Una vuelta completa son 4096 cuentas.
         vTaskDelay(pdMS_TO_TICKS(100));
     }
 }
