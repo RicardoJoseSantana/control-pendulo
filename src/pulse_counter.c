@@ -9,7 +9,6 @@
 #include "esp_intr_alloc.h"
 
 // --- Definiciones privadas del módulo ---
-// --- Definiciones privadas del módulo ---
 #define PULSE_GPIO_A GPIO_NUM_27 // --- RENOMBRADO --- Pin para la señal A del encoder
 #define PULSE_GPIO_B GPIO_NUM_14 // --- AÑADIDO --- Pin para la señal B del encoder
 #define PULSE_GPIO_Z GPIO_NUM_12 // --- AÑADIDO --- Pin para la señal Z (índice) del encoder
@@ -81,7 +80,7 @@ void pulse_counter_task(void *arg)
     gpio_isr_handler_add(PULSE_GPIO_A, gpio_isr_handler_A, (void *)PULSE_GPIO_A);
     gpio_isr_handler_add(PULSE_GPIO_Z, gpio_isr_handler_Z, (void *)PULSE_GPIO_Z);
 
-    ESP_LOGI(TAG, "Configuración completa. Esperando pulsos...");
+    ESP_LOGI(TAG, "Configuracion completa. Esperando pulsos...");
 
     int last_pulse_count = 0; // Para detectar cambios
 
@@ -93,7 +92,7 @@ void pulse_counter_task(void *arg)
         // Comprobamos si el pulso de índice ha sido detectado por la ISR
         if (g_z_pulse_detected)
         {
-            ESP_LOGW(TAG, "¡Pulso de ÍNDICE (Z) detectado! Reseteando contador a CERO. Valor anterior: %d", g_pulse_count);
+            ESP_LOGW(TAG, "¡Pulso de INDICE (Z) detectado! Reseteando contador a CERO. Valor anterior: %d", g_pulse_count);
             g_pulse_count = 0;
             g_z_pulse_detected = false; // Importante: Limpiamos el flag después de procesarlo
             last_pulse_count = 0;
@@ -102,7 +101,7 @@ void pulse_counter_task(void *arg)
         // Imprimimos la posición solo si ha cambiado, para no saturar la consola
         if (g_pulse_count != last_pulse_count)
         {
-            ESP_LOGI(TAG, "Posición actual: %d", g_pulse_count);
+            ESP_LOGI(TAG, "Posicion actual: %d", g_pulse_count);
             last_pulse_count = g_pulse_count;
         }
 

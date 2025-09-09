@@ -1,14 +1,20 @@
 #include "pwm_generator.h"
 #include "driver/gpio.h" // Necesario para controlar el pin de dirección
+#include "nvs_flash.h" // Cabeceras para NVS
+#include "nvs.h"
 
 static const char *TAG = "PWM_GENERATOR";
 
+// --- Definiciones para NVS ---
+#define NVS_STORAGE_NAMESPACE "storage" // Un "espacio de nombres" para organizar los datos
+#define NVS_COMMAND_KEY "last_cmd"      // La "llave" bajo la cual guardaremos nuestro comando
+
 // Se inicializa con los valores por defecto.
-static pwm_command_t g_last_command = {
+static pwm_command_t g_last_command;/* = {
     .num_pulses = 400,
     .frequency = 1000,
     .direction = 0 // 0 para Derecha
-};
+};*/
 
 // Configuración del LEDC (PWM)
 static void ledc_init(void) {
@@ -82,8 +88,64 @@ void execute_movement(int num_pulses, int frequency, int direction) {
     ESP_LOGI(TAG, "Movimiento finalizado.");
 }
 
+// --- función para guardar el comando en NVS ---
+static void save_command_to_nvs(const pwm_command_t *cmd) {
+    nvs_handle_t nvs_handle;
+    esp_err_t err = nvs_open(NVS_STORAGE_NAMESPACE, NVS_READWRITE, &nvs_handle);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Error (%s) abriendo el manejador NVS!", esp_err_to_name(err));
+        return;
+    }
+
+    // Guardamos la estructura 'cmd' entera como un "blob" (bloque de bytes)
+    err = nvs_set_blob(nvs_handle, NVS_COMMAND_KEY, cmd, sizeof(pwm_command_t));
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Error (%s) guardando el comando en NVS!", esp_err_to_name(err));
+    } else {
+        ESP_LOGI(TAG, "Comando guardado en NVS con éxito.");
+    }
+
+    // 'Commit' es necesario para escribir los cambios en la flash
+    err = nvs_commit(nvs_handle);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Error (%s) haciendo commit en NVS!", esp_err_to_name(err));
+    }
+
+    nvs_close(nvs_handle);
+}
+
+// --- AÑADIDO: Nueva función para cargar el comando desde NVS ---
+static void load_command_from_nvs(void) {
+    nvs_handle_t nvs_handle;
+    esp_err_t err = nvs_open(NVS_STORAGE_NAMESPACE, NVS_READONLY, &nvs_handle);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Error (%s) abriendo el manejador NVS!", esp_err_to_name(err));
+    }
+
+    size_t required_size = sizeof(pwm_command_t);
+    // Leemos el "blob" desde la NVS y lo guardamos en nuestra variable global
+    err = nvs_get_blob(nvs_handle, NVS_COMMAND_KEY, &g_last_command, &required_size);
+
+    if (err == ESP_OK) {
+        ESP_LOGI(TAG, "Último comando cargado desde NVS: %d pulsos, %d Hz, Dir: %d", 
+                 g_last_command.num_pulses, g_last_command.frequency, g_last_command.direction);
+    } else if (err == ESP_ERR_NVS_NOT_FOUND) {
+        ESP_LOGI(TAG, "No se encontró ningún comando en NVS. Usando valores por defecto.");
+        // Si no se encuentra, inicializamos con los valores por defecto
+        g_last_command.num_pulses = 400;
+        g_last_command.frequency = 1000;
+        g_last_command.direction = 0;
+    } else {
+        ESP_LOGE(TAG, "Error (%s) leyendo desde NVS!", esp_err_to_name(err));
+    }
+
+    nvs_close(nvs_handle);
+}
+
 void pwm_generator_task(void *arg) {
     ledc_init(); // Inicializa el módulo LEDC
+
+    load_command_from_nvs(); // Cargar el último comando al iniciar la tarea
 
     pwm_command_t received_command;
     //int current_duty = 0; // 0 = apagado, 511 = 50% ciclo de trabajo para 10-bit
@@ -103,6 +165,8 @@ void pwm_generator_task(void *arg) {
                 ESP_LOGI(TAG, "Comando nuevo recibido del UART. Actualizando y ejecutando.");
                 // 1. Guardar este comando como el "último comando"
                 g_last_command = received_command;
+                // --- Guardar el nuevo comando en NVS ---
+                save_command_to_nvs(&g_last_command);
                 // 2. Ejecutar el movimiento con los datos recibidos
                 execute_movement(received_command.num_pulses, received_command.frequency, received_command.direction);
             }
