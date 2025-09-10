@@ -24,7 +24,7 @@ static void ledc_init(void) {
         .timer_num        = LEDC_TIMER,
         .duty_resolution  = LEDC_DUTY_RES,
         //.freq_hz          = LEDC_FREQUENCY, // Frecuencia de 1 kHz
-        .freq_hz          = 100, // Una frecuencia inicial por defecto
+        .freq_hz          = 1000, // Una frecuencia inicial por defecto
         .clk_cfg          = LEDC_AUTO_CLK
     };
     ESP_ERROR_CHECK(ledc_timer_config(&ledc_timer));
@@ -65,7 +65,12 @@ void execute_movement(int num_pulses, int frequency, int direction) {
     ESP_LOGI(TAG, "Pin de dirección (GPIO %d) puesto a %d", LEDC_DIRECTION_IO, direction);
 
     // 2. Ajustar la frecuencia del PWM dinámicamente
-    ESP_ERROR_CHECK(ledc_set_freq(LEDC_MODE, LEDC_TIMER, frequency));
+    esp_err_t freq_err = ledc_set_freq(LEDC_MODE, LEDC_TIMER, frequency);
+    if (freq_err != ESP_OK) {
+        ESP_LOGE(TAG, "Error al establecer la frecuencia a %d Hz: %s", frequency, esp_err_to_name(freq_err));
+        // Opcional: Detener el movimiento si la frecuencia falla
+        return; 
+    }
     ESP_LOGI(TAG, "Frecuencia del PWM ajustada a %d Hz", frequency);
 
     // 3. Calcular la duración del movimiento en milisegundos
@@ -144,7 +149,7 @@ static void load_command_from_nvs(void) {
     nvs_close(nvs_handle);
 }
 
-void pwm_generator_task(void *arg) {
+/*void pwm_generator_task(void *arg) {
     ledc_init(); // Inicializa el módulo LEDC
 
     load_command_from_nvs(); // Cargar el último comando al iniciar la tarea
@@ -174,4 +179,4 @@ void pwm_generator_task(void *arg) {
             }
         }
     }
-}
+}*/

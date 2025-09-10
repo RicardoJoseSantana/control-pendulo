@@ -6,6 +6,7 @@
 #include "driver/gpio.h"
 #include "esp_log.h"
 #include "uart_echo.h" // Incluimos para acceder a la cola y la estructura de comando
+#include "pid_controller.h"
 
 #define BOOT_BUTTON_GPIO GPIO_NUM_0
 static const char *TAG = "BUTTON_HANDLER";
@@ -32,7 +33,7 @@ void button_handler_task(void *arg) {
             // Anti-rebote: esperar un poco y confirmar
             vTaskDelay(pdMS_TO_TICKS(50));
             if (gpio_get_level(BOOT_BUTTON_GPIO) == 0) {
-                ESP_LOGI(TAG, "¡Botón BOOT presionado! Enviando comando de repetición...");
+                /*ESP_LOGI(TAG, "¡Botón BOOT presionado! Enviando comando de repetición...");
 
                 // --- AÑADIDO: Lógica de envío de comando especial ---
                 // Creamos un comando especial donde 'num_pulses' es -1.
@@ -44,7 +45,8 @@ void button_handler_task(void *arg) {
                     ESP_LOGE(TAG, "No se pudo enviar el comando de repetición a la cola.");
                 } else {
                     ESP_LOGI(TAG, "Comando de repetición enviado.");
-                }
+                }*/
+               pid_toggle_enable();
             }
         }
         

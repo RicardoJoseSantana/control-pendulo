@@ -3,6 +3,7 @@
 #include <stdlib.h> // Para atoi
 #include "uart_echo.h"
 #include "freertos/queue.h" // Necesario para crear la cola
+#include "pid_controller.h"
 
 static const char *TAG = "UART_ECHO";
 
@@ -37,8 +38,10 @@ void uart_echo_task(void *arg) {
         vTaskDelete(NULL);
     }
 
-    ESP_LOGI(TAG, "Tarea de eco UART iniciada.");
-    ESP_LOGI(TAG, "Formato: PULSOS <#pulsos> <frec> <dir>. Ej: PULSOS 200 1000 1");
+    //ESP_LOGI(TAG, "Tarea de eco UART iniciada.");
+    //ESP_LOGI(TAG, "Formato: PULSOS <#pulsos> <frec> <dir>. Ej: PULSOS 200 1000 1");
+    ESP_LOGI(TAG, "Consola de Sintonización iniciada.");
+    ESP_LOGI(TAG, "Comandos: SETKP <valor>, SETKI <valor>, SETKD <valor>");
 
     while (1) {
         int len = uart_read_bytes(UART_PORT, data, (BUF_SIZE - 1), 20 / portTICK_PERIOD_MS);
@@ -48,38 +51,22 @@ void uart_echo_task(void *arg) {
             //uart_write_bytes(UART_PORT, (const char *) data, len); // Eco de lo recibido
 
             // --- LÓGICA DE PARSEO ---
-            char *cmd_token = strtok((char *)data, " ");
-            if (cmd_token != NULL && strcmp(cmd_token, "PULSOS") == 0) {
-                
-                char *pulses_token = strtok(NULL, " ");
-                char *freq_token = strtok(NULL, " ");
-                char *dir_token = strtok(NULL, " \r\n");
+            char *cmd = strtok((char *)data, " ");
+            char *val = strtok(NULL, " \r\n");
 
-                if (pulses_token != NULL && freq_token != NULL && dir_token != NULL) {
-                    int num_pulses = atoi(pulses_token);
-                    int frequency = atoi(freq_token);
-                    int direction = atoi(dir_token);
-
-                    // Validar los datos recibidos
-                    if (num_pulses > 0 && frequency > 0 && (direction == 0 || direction == 1)) {
-                        pwm_command_t command;
-                        command.num_pulses = num_pulses;
-                        command.frequency = frequency;
-                        command.direction = direction;
-                        
-                        if (xQueueSend(pwm_command_queue, &command, portMAX_DELAY) != pdPASS) {
-                            ESP_LOGE(TAG, "No se pudo enviar el comando a la cola");
-                        } else {
-                            ESP_LOGI(TAG, "Comando enviado: %d pulsos, %d Hz, Dir: %d", command.num_pulses, command.frequency, command.direction);
-                        }
-                    } else {
-                        uart_write_bytes(UART_PORT, "Error: Argumentos inválidos.\r\n", strlen("Error: Argumentos inválidos.\r\n"));
-                    }
+            if (cmd != NULL && val != NULL) {
+                float value = atof(val); // Convertir el string a float
+                if (strcmp(cmd, "SETKP") == 0) {
+                    pid_set_kp(value);
+                } else if (strcmp(cmd, "SETKI") == 0) {
+                    pid_set_ki(value);
+                } else if (strcmp(cmd, "SETKD") == 0) {
+                    pid_set_kd(value);
                 } else {
-                    uart_write_bytes(UART_PORT, "Error: Faltan argumentos. Formato: PULSOS <#pulsos> <frec> <dir>\r\n", strlen("Error: Faltan argumentos. Formato: PULSOS <#pulsos> <frec> <dir>\r\n"));
+                    uart_write_bytes(UART_PORT, "Comando desconocido.\r\n", strlen("Comando desconocido.\r\n"));
                 }
             } else {
-                 uart_write_bytes(UART_PORT, "Comando desconocido.\r\n", strlen("Comando desconocido.\r\n"));
+                 uart_write_bytes(UART_PORT, "Formato incorrecto.\r\n", strlen("Formato incorrecto.\r\n"));
             }
         }
     }
