@@ -28,7 +28,11 @@
 // Banda muerta (Dead Band). Si el error (en cuentas del encoder) es menor que
 // este valor, lo consideramos cero. Esto es CRUCIAL para evitar que el motor
 // vibre o "tiemble" constantemente tratando de corregir errores minúsculos.
-#define DEAD_BAND_PULSES   50
+#define DEAD_BAND_PULSES   30
+
+// Evita que el término integral crezca indefinidamente y desestabilice el sistema.
+// Este valor debe ser menor o igual a MAX_OUTPUT_PULSES.
+#define MAX_INTEGRAL       400.0f
 
 // --- PARÁMETROS DEL ACTUADOR (MOTOR) ---
 // Límite máximo de pulsos que el PID puede ordenar en una sola corrección.
@@ -37,7 +41,7 @@
 #define MAX_OUTPUT_PULSES  500
 
 // Frecuencia base (velocidad mínima) para los movimientos de corrección.
-#define BASE_FREQUENCY     3000
+#define BASE_FREQUENCY     5000
 
 // Factor de escalado de velocidad. Hace que la corrección sea más rápida
 // para errores grandes. La frecuencia final será:
@@ -53,7 +57,7 @@ static const char *TAG = "PID_CONTROLLER";
 // Variables de estado globales para el controlador
 static volatile bool g_pid_enabled = false;
 static float g_kp = 1.0;  // Ganancia Proporcional: El "presente". Reacciona al error actual.
-static float g_ki = 0.0;  // Ganancia Integral: El "pasado". Corrige errores acumulados. (DESHABILITADA)
+static float g_ki = 0.05;  // Ganancia Integral: El "pasado". Corrige errores acumulados. (DESHABILITADA)
 static float g_kd = 10.0;  // Ganancia Derivativa: El "futuro". Predice y amortigua. (DESHABILITADA)
 
 static float g_integral = 0.0;
@@ -83,10 +87,16 @@ void pid_set_kd(float kd) { g_kd = kd; ESP_LOGI(TAG, "Kd actualizado a: %f", g_k
 void pid_controller_task(void *arg) {
     TickType_t last_wake_time = xTaskGetTickCount();
 
+    // Reseteamos el error anterior al habilitar para evitar un pico inicial en D
+    pid_toggle_enable(); // Habilita y resetea
+    pid_toggle_enable(); // Deshabilita de nuevo, pero el estado está limpio
+
     while (1) {
         vTaskDelayUntil(&last_wake_time, pdMS_TO_TICKS(PID_LOOP_PERIOD_MS));
 
         if (!g_pid_enabled) {
+            g_last_error = 0; // Mientras está deshabilitado, el error anterior es cero
+            g_integral = 0.0; // Reseteamos el término integral al deshabilitar
             continue;
         }
 
@@ -101,9 +111,29 @@ void pid_controller_task(void *arg) {
             error = 0;
         }
 
+        // Acumulamos el error en el término integral.
+        // Se multiplica por (PID_LOOP_PERIOD_MS / 1000.0f) para que sea independiente de la frecuencia del bucle.
+        g_integral += error * (PID_LOOP_PERIOD_MS / 1000.0f);
+
+        // Anti-Windup: Limitamos el término integral para que no crezca demasiado.
+        if (g_integral > MAX_INTEGRAL) g_integral = MAX_INTEGRAL;
+        if (g_integral < -MAX_INTEGRAL) g_integral = -MAX_INTEGRAL;
+
+        // Si el error es cero, reseteamos el integral para evitar que siga actuando innecesariamente.
+        if(error == 0) g_integral = 0;
+
+        float i_term = g_ki * g_integral;
+
         // 4. CALCULAR SALIDA DEL CONTROLADOR (Solo Proporcional por ahora)
         float p_term = g_kp * error;
-        float output = p_term; // En el futuro será: p_term + i_term + d_term
+
+        // --- Término Derivativo (D) ---
+        // Calcula la "velocidad" del error (cuánto cambió desde el último ciclo)
+        float derivative = error - g_last_error;
+        float d_term = g_kd * derivative;
+
+        // Sumamos los términos para obtener la salida final
+        float output = p_term + d_term + i_term;
 
         // 5. SATURAR LA SALIDA
         if (output > MAX_OUTPUT_PULSES) output = MAX_OUTPUT_PULSES;

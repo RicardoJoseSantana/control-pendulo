@@ -24,6 +24,6 @@ void execute_movement(int num_pulses, int frequency, int direction);
 // Declaración de la tarea del generador PWM
 void pwm_generator_task(void *arg);
 
-static void ledc_init(void);
+void ledc_init(void);
 
 #endif // PWM_GENERATOR_H

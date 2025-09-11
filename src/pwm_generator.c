@@ -17,7 +17,7 @@ static pwm_command_t g_last_command;/* = {
 };*/
 
 // Configuración del LEDC (PWM)
-static void ledc_init(void) {
+void ledc_init(void) {
     // Configuración del temporizador
     ledc_timer_config_t ledc_timer = {
         .speed_mode       = LEDC_MODE,
@@ -148,35 +148,3 @@ static void load_command_from_nvs(void) {
 
     nvs_close(nvs_handle);
 }
-
-/*void pwm_generator_task(void *arg) {
-    ledc_init(); // Inicializa el módulo LEDC
-
-    load_command_from_nvs(); // Cargar el último comando al iniciar la tarea
-
-    pwm_command_t received_command;
-    //int current_duty = 0; // 0 = apagado, 511 = 50% ciclo de trabajo para 10-bit
-
-    while (1) {
-        // Espera por un comando en la cola
-         if (xQueueReceive(pwm_command_queue, &received_command, portMAX_DELAY) == pdPASS) {
-            
-            // --- AÑADIDO: Lógica para decidir qué hacer con el comando ---
-            if (received_command.num_pulses == -1) {
-                // Es el comando especial de "repetir" enviado por el botón
-                ESP_LOGI(TAG, "Comando de repetición recibido. Ejecutando último comando guardado.");
-                // Ejecuta el movimiento usando la variable global 'g_last_command'
-                execute_movement(g_last_command.num_pulses, g_last_command.frequency, g_last_command.direction);
-            } else {
-                // Es un comando nuevo y válido del UART
-                ESP_LOGI(TAG, "Comando nuevo recibido del UART. Actualizando y ejecutando.");
-                // 1. Guardar este comando como el "último comando"
-                g_last_command = received_command;
-                // --- Guardar el nuevo comando en NVS ---
-                save_command_to_nvs(&g_last_command);
-                // 2. Ejecutar el movimiento con los datos recibidos
-                execute_movement(received_command.num_pulses, received_command.frequency, received_command.direction);
-            }
-        }
-    }
-}*/

@@ -20,38 +20,7 @@ void app_main(void) {
     }
     ESP_ERROR_CHECK(ret);
 
-    // Configuración del temporizador
-    ledc_timer_config_t ledc_timer = {
-        .speed_mode       = LEDC_MODE,
-        .timer_num        = LEDC_TIMER,
-        .duty_resolution  = LEDC_DUTY_RES,
-        //.freq_hz          = LEDC_FREQUENCY, // Frecuencia de 1 kHz
-        .freq_hz          = 1000, // Una frecuencia inicial por defecto
-        .clk_cfg          = LEDC_AUTO_CLK
-    };
-    ESP_ERROR_CHECK(ledc_timer_config(&ledc_timer));
-
-    // Configuración del canal PWM
-    ledc_channel_config_t ledc_channel = {
-        .speed_mode     = LEDC_MODE,
-        .channel        = LEDC_CHANNEL,
-        .timer_sel      = LEDC_TIMER,
-        .intr_type      = LEDC_INTR_DISABLE,
-        .gpio_num       = LEDC_OUTPUT_IO,
-        .duty           = 0, // Inicia con el PWM apagado
-        .hpoint         = 0
-    };
-    ESP_ERROR_CHECK(ledc_channel_config(&ledc_channel));
-
-    // 3. Configuración del pin de dirección como salida
-    gpio_config_t dir_gpio_config = {
-        .pin_bit_mask = (1ULL << LEDC_DIRECTION_IO), // <-- Usa la definición del .h (GPIO 33)
-        .mode = GPIO_MODE_OUTPUT
-        //.pull_up_en = GPIO_PULLUP_DISABLE,
-        //.pull_down_en = GPIO_PULLDOWN_DISABLE,
-        //.intr_type = GPIO_INTR_DISABLE
-    };
-    ESP_ERROR_CHECK(gpio_config(&dir_gpio_config));
+    ledc_init();
 
     // 3. Creación de todas las tareas de la aplicación
     // Cada tarea se ejecutará de forma independiente y concurrente.
