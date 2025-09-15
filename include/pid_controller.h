@@ -31,4 +31,10 @@ void pid_set_ki(float ki);
  */
 void pid_set_kd(float kd);
 
+/**
+ * @brief Devuelve si el bucle de control del PID está actualmente habilitado.
+ * @return true si está habilitado, false si no.
+ */
+bool pid_is_enabled(void);
+
 #endif // PID_CONTROLLER_H

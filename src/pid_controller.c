@@ -18,7 +18,7 @@
 // Frecuencia a la que se ejecutará el bucle de control. 50 Hz es un buen punto
 // de partida para sistemas mecánicos. Un valor más bajo es menos reactivo, uno
 // más alto consume más CPU y puede ser más sensible al ruido.
-#define PID_LOOP_PERIOD_MS 20       // Frecuencia del bucle: 1000ms / 20ms = 50 Hz
+#define PID_LOOP_PERIOD_MS 10       // Frecuencia del bucle: 1000ms / 20ms = 50 Hz
 
 // --- PARÁMETROS DE CONTROL ---
 // El punto de equilibrio deseado. Gracias a la señal Z del encoder que resetea
@@ -38,7 +38,7 @@
 // Límite máximo de pulsos que el PID puede ordenar en una sola corrección.
 // Sirve como medida de seguridad para evitar que una reacción brusca del PID
 // genere un movimiento demasiado violento.
-#define MAX_OUTPUT_PULSES  500
+#define MAX_OUTPUT_PULSES  1000
 
 // Frecuencia base (velocidad mínima) para los movimientos de corrección.
 #define BASE_FREQUENCY     5000
@@ -55,10 +55,11 @@
 static const char *TAG = "PID_CONTROLLER";
 
 // Variables de estado globales para el controlador
+// para 3200pulse/rev kp=5, ki=1, kd=10
 static volatile bool g_pid_enabled = false;
 static float g_kp = 1.0;  // Ganancia Proporcional: El "presente". Reacciona al error actual.
-static float g_ki = 0.05;  // Ganancia Integral: El "pasado". Corrige errores acumulados. (DESHABILITADA)
-static float g_kd = 10.0;  // Ganancia Derivativa: El "futuro". Predice y amortigua. (DESHABILITADA)
+static float g_ki = 0.0;  // Ganancia Integral: El "pasado". Corrige errores acumulados. (DESHABILITADA)
+static float g_kd = 0.0;  // Ganancia Derivativa: El "futuro". Predice y amortigua. (DESHABILITADA)
 
 static float g_integral = 0.0;
 static float g_last_error = 0.0;
@@ -80,6 +81,11 @@ void pid_toggle_enable(void) {
 void pid_set_kp(float kp) { g_kp = kp; ESP_LOGI(TAG, "Kp actualizado a: %f", g_kp); }
 void pid_set_ki(float ki) { g_ki = ki; ESP_LOGI(TAG, "Ki actualizado a: %f", g_ki); }
 void pid_set_kd(float kd) { g_kd = kd; ESP_LOGI(TAG, "Kd actualizado a: %f", g_kd); }
+
+
+bool pid_is_enabled(void) {
+    return g_pid_enabled;
+}
 
 
 // --- Tarea Principal del Controlador ---
