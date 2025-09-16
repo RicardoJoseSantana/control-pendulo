@@ -1,8 +1,9 @@
 // src/pid_controller.h
 #ifndef PID_CONTROLLER_H
 #define PID_CONTROLLER_H
-
+    
 #include <stdbool.h>
+#include <stdint.h>
 
 /**
  * @brief Tarea principal del controlador PID.
@@ -30,6 +31,12 @@ void pid_set_ki(float ki);
  * @brief Establece el valor de la ganancia Derivativa (Kd). (Para uso futuro)
  */
 void pid_set_kd(float kd);
+
+/**
+ * @brief Devuelve el punto de consigna (setpoint) actual del controlador.
+ * @return El setpoint actual en cuentas del encoder.
+ */
+int16_t pid_get_setpoint(void);
 
 /**
  * @brief Devuelve si el bucle de control del PID está actualmente habilitado.
