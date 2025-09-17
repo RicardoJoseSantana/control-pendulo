@@ -47,11 +47,14 @@
 // Factor de escalado de velocidad. Hace que la corrección sea más rápida
 // para errores grandes. La frecuencia final será:
 // Frecuencia = BASE_FREQUENCY + (Error * FREQ_PER_ERROR_PULSE)
-#define FREQ_PER_ERROR_PULSE 90.0f
+#define FREQ_PER_ERROR_PULSE 80.0f
 
 /************************************************************************************
  *                        FIN DE LA CONFIGURACIÓN DE PARÁMETROS                     *
  ************************************************************************************/
+
+// Calculamos el tiempo del ciclo en segundos (dt) una sola vez.
+static const float PID_LOOP_PERIOD_S = PID_LOOP_PERIOD_MS / 1000.0f;
 
 static const char *TAG = "PID_CONTROLLER";
 
@@ -135,7 +138,7 @@ void pid_controller_task(void *arg) {
 
         // Acumulamos el error en el término integral.
         // Se multiplica por (PID_LOOP_PERIOD_MS / 1000.0f) para que sea independiente de la frecuencia del bucle.
-        g_integral += error * (PID_LOOP_PERIOD_MS / 1000.0f);
+        g_integral += error * PID_LOOP_PERIOD_S;
 
         // Anti-Windup: Limitamos el término integral para que no crezca demasiado.
         if (g_integral > MAX_INTEGRAL) g_integral = MAX_INTEGRAL;
@@ -151,7 +154,7 @@ void pid_controller_task(void *arg) {
 
         // --- Término Derivativo (D) ---
         // Calcula la "velocidad" del error (cuánto cambió desde el último ciclo)
-        float derivative = error - g_last_error;
+        float derivative = (error - g_last_error) / PID_LOOP_PERIOD_S;
         float d_term = g_kd * derivative;
 
         // Sumamos los términos para obtener la salida final

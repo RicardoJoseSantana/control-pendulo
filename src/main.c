@@ -21,6 +21,7 @@ void app_main(void) {
     ESP_ERROR_CHECK(ret);
 
     ledc_init();
+    pcnt_and_z_index_init();
 
     // 3. Creación de todas las tareas de la aplicación
     // Cada tarea se ejecutará de forma independiente y concurrente.
@@ -35,7 +36,7 @@ void app_main(void) {
     //xTaskCreate(pwm_generator_task, "pwm_generator_task", configMINIMAL_STACK_SIZE * 3, NULL, 5, NULL);
 
     // Tarea que inicializa el PCNT y reporta la posición del encoder para depuración
-    xTaskCreate(pulse_counter_task, "pulse_counter_task", configMINIMAL_STACK_SIZE * 3, NULL, 5, NULL);
+    //xTaskCreate(pulse_counter_task, "pulse_counter_task", configMINIMAL_STACK_SIZE * 3, NULL, 5, NULL);
 
     // Tarea que monitorea el botón BOOT y envía comandos de "repetir"
     xTaskCreate(button_handler_task, "button_handler_task", configMINIMAL_STACK_SIZE * 3, NULL, 5, NULL);

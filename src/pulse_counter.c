@@ -25,7 +25,7 @@ static void IRAM_ATTR encoder_index_z_isr_handler(void* arg) {
 /**
  * @brief Inicializa el PCNT en modo cuadratura y la interrupción de la señal Z.
  */
-static void pcnt_and_z_index_init(void) {
+void pcnt_and_z_index_init(void) {
     // Configuración para el Canal 0 (Fase A como pulso, Fase B como dirección)
     pcnt_config_t pcnt_config_ch0 = {
         .pulse_gpio_num = PCNT_INPUT_A_PIN,
@@ -93,7 +93,7 @@ int16_t pulse_counter_get_value(void) {
 /**
  * @brief Tarea principal del módulo para inicialización y depuración.
  */
-void pulse_counter_task(void *arg) {
+/*void pulse_counter_task(void *arg) {
     pcnt_and_z_index_init();
 
     // Este bucle solo sirve para depuración.
@@ -108,4 +108,4 @@ void pulse_counter_task(void *arg) {
         // y resetearse a 0 al pasar por la señal Z. Una vuelta completa son 4096 cuentas.
         vTaskDelay(pdMS_TO_TICKS(100));
     }
-}
+}*/

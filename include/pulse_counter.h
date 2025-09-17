@@ -20,7 +20,14 @@ int16_t pulse_counter_get_value(void);
  * Realiza toda la configuración del hardware. Después se usa para depuración.
  * 
  * @param arg Argumentos pasados a la tarea (no se usa).
+ 
+void pulse_counter_task(void *arg);*/
+
+/**
+ * @brief Inicializa el hardware del contador de pulsos (PCNT y GPIOs).
+ * 
+ * Debe ser llamada una sola vez al inicio del programa.
  */
-void pulse_counter_task(void *arg);
+void pcnt_and_z_index_init(void);
 
 #endif // PULSE_COUNTER_H
