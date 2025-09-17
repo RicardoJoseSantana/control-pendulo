@@ -10,7 +10,7 @@ static const char *TAG = "PWM_GENERATOR";
 #define NVS_COMMAND_KEY "last_cmd"      // La "llave" bajo la cual guardaremos nuestro comando
 
 // Se inicializa con los valores por defecto.
-static pwm_command_t g_last_command;/* = {
+/*static pwm_command_t g_last_command; = {
     .num_pulses = 400,
     .frequency = 1000,
     .direction = 0 // 0 para Derecha
@@ -58,25 +58,25 @@ void ledc_init(void) {
 
 // --- FUNCIÓN DE ACCIÓN NUEVA Y CENTRAL ---
 void execute_movement(int num_pulses, int frequency, int direction) {
-    ESP_LOGI(TAG, "Ejecutando movimiento: %d pulsos a %d Hz, Dir: %d", num_pulses, frequency, direction);
+    //ESP_LOGI(TAG, "Ejecutando movimiento: %d pulsos a %d Hz, Dir: %d", num_pulses, frequency, direction);
 
     // 1. Establecer la dirección
     gpio_set_level(LEDC_DIRECTION_IO, direction);
-    ESP_LOGI(TAG, "Pin de dirección (GPIO %d) puesto a %d", LEDC_DIRECTION_IO, direction);
+    //ESP_LOGI(TAG, "Pin de dirección (GPIO %d) puesto a %d", LEDC_DIRECTION_IO, direction);
 
     // 2. Ajustar la frecuencia del PWM dinámicamente
     esp_err_t freq_err = ledc_set_freq(LEDC_MODE, LEDC_TIMER, frequency);
-    if (freq_err != ESP_OK) {
+    /*if (freq_err != ESP_OK) {
         ESP_LOGE(TAG, "Error al establecer la frecuencia a %d Hz: %s", frequency, esp_err_to_name(freq_err));
         // Opcional: Detener el movimiento si la frecuencia falla
         return; 
-    }
-    ESP_LOGI(TAG, "Frecuencia del PWM ajustada a %d Hz", frequency);
+    }*/
+    //ESP_LOGI(TAG, "Frecuencia del PWM ajustada a %d Hz", frequency);
 
     // 3. Calcular la duración del movimiento en milisegundos
     // duration_ms = (num_pulses / frequency_Hz) * 1000_ms_per_s
     uint32_t duration_ms = (uint32_t)(num_pulses * 1000) / frequency;
-    ESP_LOGI(TAG, "Duración calculada: %lu ms", duration_ms);
+    //ESP_LOGI(TAG, "Duración calculada: %lu ms", duration_ms);
     
     // 4. Iniciar la generación de pulsos (50% duty cycle)
     int duty_cycle = (1 << LEDC_DUTY_RES) / 2;
@@ -92,11 +92,11 @@ void execute_movement(int num_pulses, int frequency, int direction) {
 
     gpio_set_level(LEDC_DIRECTION_IO, 0);
     
-    ESP_LOGI(TAG, "Movimiento finalizado.");
+    //ESP_LOGI(TAG, "Movimiento finalizado.");
 }
 
 // --- función para guardar el comando en NVS ---
-static void save_command_to_nvs(const pwm_command_t *cmd) {
+/*static void save_command_to_nvs(const pwm_command_t *cmd) {
     nvs_handle_t nvs_handle;
     esp_err_t err = nvs_open(NVS_STORAGE_NAMESPACE, NVS_READWRITE, &nvs_handle);
     if (err != ESP_OK) {
@@ -147,4 +147,4 @@ static void load_command_from_nvs(void) {
     }
 
     nvs_close(nvs_handle);
-}
+}*/
