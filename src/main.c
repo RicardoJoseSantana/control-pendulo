@@ -10,6 +10,9 @@
 #include "button_handler.h" // Para la tarea de lectura del botón
 #include "pid_controller.h"
 
+//#define ENABLE_PID_BUTTON_GPIO  GPIO_NUM_23
+//#define boton_emergencia GPIO_NUM_22
+
 void app_main(void) {
     // 2. Inicialización de servicios globales (primero que nada)
     // Es crucial inicializar la partición de la NVS antes de que cualquier tarea intente usarla.
@@ -20,8 +23,11 @@ void app_main(void) {
     }
     ESP_ERROR_CHECK(ret);
 
-    ledc_init();
-    pcnt_and_z_index_init();
+    pwm_init();
+    pulse_counter_init();
+
+    //while (gpio_get_level(ENABLE_PID_BUTTON_GPIO) != 0) ;
+    //pid_toggle_enable();
 
     // 3. Creación de todas las tareas de la aplicación
     // Cada tarea se ejecutará de forma independiente y concurrente.
@@ -30,14 +36,15 @@ void app_main(void) {
     xTaskCreate(pid_controller_task, "pid_controller_task", configMINIMAL_STACK_SIZE * 4, NULL, 6, NULL);
 
     // Tarea para manejar los comandos recibidos por el puerto serie
-    xTaskCreate(uart_echo_task, "uart_echo_task", configMINIMAL_STACK_SIZE * 3, NULL, 5, NULL);
+    xTaskCreate(uart_echo_task, "uart_echo_task", configMINIMAL_STACK_SIZE * 3, NULL, 4, NULL);
 
     // Tarea que espera comandos en la cola y mueve el motor
+    //xTaskCreate(pwm_generator_task, "pwm_generator_task", configMINIMAL_STACK_SIZE * 3, NULL, 5, NULL);
     //xTaskCreate(pwm_generator_task, "pwm_generator_task", configMINIMAL_STACK_SIZE * 3, NULL, 5, NULL);
 
     // Tarea que inicializa el PCNT y reporta la posición del encoder para depuración
     //xTaskCreate(pulse_counter_task, "pulse_counter_task", configMINIMAL_STACK_SIZE * 3, NULL, 5, NULL);
 
     // Tarea que monitorea el botón BOOT y envía comandos de "repetir"
-    xTaskCreate(button_handler_task, "button_handler_task", configMINIMAL_STACK_SIZE * 3, NULL, 5, NULL);
+    xTaskCreate(button_handler_task, "button_handler_task", configMINIMAL_STACK_SIZE * 3, NULL, 4, NULL);
 }

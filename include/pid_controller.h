@@ -44,4 +44,8 @@ int16_t pid_get_setpoint(void);
  */
 bool pid_is_enabled(void);
 
+//para parada de emergencia.
+
+void pid_force_disable(void);
+
 #endif // PID_CONTROLLER_H

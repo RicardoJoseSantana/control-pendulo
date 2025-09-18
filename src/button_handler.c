@@ -11,13 +11,14 @@
 
 // --- PINES DE LOS BOTONES ---
 #define SEQUENCE_BUTTON_GPIO GPIO_NUM_0
-#define ENABLE_PID_BUTTON_GPIO  GPIO_NUM_23  // Botón BOOT para Habilitar/Deshabilitar PID
+#define ENABLE_PID_BUTTON_GPIO  GPIO_NUM_23  // Botón para Habilitar/Deshabilitar PID
 #define MANUAL_LEFT_BUTTON_GPIO GPIO_NUM_21 // Nuevo botón para mover a la izquierda
 #define MANUAL_RIGHT_BUTTON_GPIO GPIO_NUM_22 // Nuevo botón para mover a la derecha
+#define EMERGENCY_STOP_GPIO       GPIO_NUM_34  // Botón de parada de emergencia
 
 // --- PARÁMETROS DE MOVIMIENTO MANUAL ---
-#define MANUAL_MOVE_SPEED_HZ 5000 // Velocidad constante para el movimiento manual (alta)
-#define MANUAL_MOVE_PULSES   200   // Cantidad de pulsos por ciclo (movimiento suave)
+#define MANUAL_MOVE_SPEED_HZ 10000 // Velocidad constante para el movimiento manual (alta)
+#define MANUAL_MOVE_PULSES   400   // Cantidad de pulsos por ciclo (movimiento suave)
 
 // --- PARÁMETROS DE MOVIMIENTO secuencia ---
 #define SEQUENCE_BASE_PULSES      16000
@@ -34,7 +35,8 @@ void button_handler_task(void *arg) {
     gpio_config_t io_conf = {
         .pin_bit_mask = ((1ULL << ENABLE_PID_BUTTON_GPIO) | 
                          (1ULL << MANUAL_LEFT_BUTTON_GPIO) | 
-                         (1ULL << MANUAL_RIGHT_BUTTON_GPIO)),
+                         (1ULL << MANUAL_RIGHT_BUTTON_GPIO) |
+                         (1ULL << EMERGENCY_STOP_GPIO)),
         .mode = GPIO_MODE_INPUT,
         .pull_up_en = GPIO_PULLUP_ENABLE,
         .pull_down_en = GPIO_PULLDOWN_DISABLE,
@@ -46,8 +48,20 @@ void button_handler_task(void *arg) {
 
     int last_button_state = 1; // 1 = no presionado
     int last_sequence_button_state = 1;
+    int last_stop_button_state = 1;
 
     while (1) {
+        // --- AÑADIDO: Lógica para la Parada de Emergencia (máxima prioridad) ---
+        int current_stop_button_state = gpio_get_level(EMERGENCY_STOP_GPIO);
+        if (last_stop_button_state == 1 && current_stop_button_state == 0) {
+            vTaskDelay(pdMS_TO_TICKS(50)); // Debounce
+            if (gpio_get_level(EMERGENCY_STOP_GPIO) == 0) {
+                // Llama a la función que solo deshabilita
+                pid_force_disable();
+            }
+        }
+        last_stop_button_state = current_stop_button_state;
+
         int current_button_state = gpio_get_level(ENABLE_PID_BUTTON_GPIO);
         
         // Detectar el flanco de bajada (cuando se presiona el botón)
@@ -71,7 +85,7 @@ void button_handler_task(void *arg) {
                 vTaskDelay(pdMS_TO_TICKS(50)); // Debounce
                 if (gpio_get_level(SEQUENCE_BUTTON_GPIO) == 0) {
                     
-                    ESP_LOGW(TAG, "¡Botón de secuencia presionado! Iniciando movimiento...");
+                    //ESP_LOGW(TAG, "¡Botón de secuencia presionado! Iniciando movimiento...");
 
                     // --- AÑADIDO: Bucle de la secuencia de movimiento ---
                     // Esta tarea se bloqueará aquí hasta que la secuencia termine.
@@ -80,11 +94,11 @@ void button_handler_task(void *arg) {
                         int pulses = SEQUENCE_BASE_PULSES - ii * 2000;
                         int frequency = SEQUENCE_BASE_SPEED_HZ + ii * 1000;
                         
-                        ESP_LOGI(TAG, "Secuencia paso %d: Dir=%d, Pulsos=%d, Freq=%d Hz", ii + 1, dirr, pulses, frequency);
+                        //ESP_LOGI(TAG, "Secuencia paso %d: Dir=%d, Pulsos=%d, Freq=%d Hz", ii + 1, dirr, pulses, frequency);
                         execute_movement(pulses, frequency, dirr);
                     }
                     
-                    ESP_LOGW(TAG, "Secuencia de movimiento finalizada.");
+                    //ESP_LOGW(TAG, "Secuencia de movimiento finalizada.");
                 }
             }
             last_sequence_button_state = current_sequence_button_state;
@@ -109,6 +123,6 @@ void button_handler_task(void *arg) {
             }
             }
 
-        //vTaskDelay(pdMS_TO_TICKS(20)); // Sondeo cada 20ms
+        vTaskDelay(pdMS_TO_TICKS(5)); // Sondeo cada 100ms
     }
 }

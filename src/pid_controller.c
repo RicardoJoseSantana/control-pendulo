@@ -8,6 +8,7 @@
 #include "esp_log.h"
 #include "pulse_counter.h" // Para leer la posición del encoder
 #include "pwm_generator.h" // Para la función que mueve el motor
+#include "uart_echo.h"
 
 /************************************************************************************
  *                                                                                  *
@@ -19,7 +20,7 @@
 // Frecuencia a la que se ejecutará el bucle de control. 50 Hz es un buen punto
 // de partida para sistemas mecánicos. Un valor más bajo es menos reactivo, uno
 // más alto consume más CPU y puede ser más sensible al ruido.
-#define PID_LOOP_PERIOD_MS 20       // Frecuencia del bucle: 1000ms / 20ms = 50 Hz
+#define PID_LOOP_PERIOD_MS 10       // Frecuencia del bucle: 1000ms / 20ms = 50 Hz
 
 // --- PARÁMETROS DE CONTROL ---
 // El punto de equilibrio deseado. Gracias a la señal Z del encoder que resetea
@@ -42,12 +43,12 @@
 #define MAX_OUTPUT_PULSES  1000
 
 // Frecuencia base (velocidad mínima) para los movimientos de corrección.
-#define BASE_FREQUENCY     6000
+#define BASE_FREQUENCY     1000
 
 // Factor de escalado de velocidad. Hace que la corrección sea más rápida
 // para errores grandes. La frecuencia final será:
 // Frecuencia = BASE_FREQUENCY + (Error * FREQ_PER_ERROR_PULSE)
-#define FREQ_PER_ERROR_PULSE 80.0f
+#define FREQ_PER_ERROR_PULSE 50.0f
 
 /************************************************************************************
  *                        FIN DE LA CONFIGURACIÓN DE PARÁMETROS                     *
@@ -99,6 +100,17 @@ void pid_set_kd(float kd) { g_kd = kd; ESP_LOGI(TAG, "Kd actualizado a: %f", g_k
 // --- AÑADIDO: Implementación de la nueva función 'getter' ---
 int16_t pid_get_setpoint(void) {
     return g_setpoint;
+}
+
+// --- AÑADIDO: Implementación de la función de deshabilitación forzada ---
+void pid_force_disable(void) {
+    if (g_pid_enabled) { // Solo actúa y muestra el mensaje si estaba habilitado
+        g_pid_enabled = false;
+        // Reseteamos el estado para un futuro arranque limpio
+        g_integral = 0.0;
+        g_last_error = 0.0;
+        ESP_LOGE(TAG, "¡PARADA DE EMERGENCIA! Control PID DESHABILITADO.");
+    }
 }
 
 bool pid_is_enabled(void) {
@@ -154,7 +166,7 @@ void pid_controller_task(void *arg) {
 
         // --- Término Derivativo (D) ---
         // Calcula la "velocidad" del error (cuánto cambió desde el último ciclo)
-        float derivative = (error - g_last_error) / PID_LOOP_PERIOD_S;
+        float derivative = (error - g_last_error);// / PID_LOOP_PERIOD_S;
         float d_term = g_kd * derivative;
 
         // Sumamos los términos para obtener la salida final
@@ -179,6 +191,23 @@ void pid_controller_task(void *arg) {
 
             execute_movement(num_pulses, frequency, direction);
         }
+        /*if (fabs(output) > 0.1) {
+            int num_pulses = (int)fabs(output);
+            int direction = (output > 0) ? 1 : 0; 
+            int frequency = BASE_FREQUENCY + (int)(fabs(output) * FREQ_PER_ERROR_PULSE);
+
+            // --- CAMBIO CLAVE: Enviar comando a la cola en lugar de llamar a la función ---
+            pwm_command_t cmd = {
+                .num_pulses = num_pulses,
+                .frequency = frequency,
+                .direction = direction
+            };
+            
+            // Usamos xQueueOverwrite. Si la cola de movimiento está ocupada con un
+            // comando antiguo, lo reemplazamos por este, que es más reciente y relevante.
+            // La tarea del PID no espera y continúa con su siguiente ciclo.
+            xQueueOverwrite(pwm_command_queue, &cmd);
+        }*/
         
         g_last_error = error; // Guardamos para el futuro término Derivativo
     }
