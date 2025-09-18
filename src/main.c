@@ -9,9 +9,18 @@
 #include "pulse_counter.h"  // Para la tarea de lectura del encoder
 #include "button_handler.h" // Para la tarea de lectura del botón
 #include "pid_controller.h"
+#include "freertos/queue.h"
 
 //#define ENABLE_PID_BUTTON_GPIO  GPIO_NUM_23
 //#define boton_emergencia GPIO_NUM_22
+
+typedef struct {
+    int num_pulses;
+    int frequency;
+    int direction;
+} motor_command_t;
+
+QueueHandle_t motor_command_queue;
 
 void app_main(void) {
     // 2. Inicialización de servicios globales (primero que nada)
@@ -34,6 +43,17 @@ void app_main(void) {
 
     // Le damos una prioridad más alta (6) para asegurar que responda rápidamente.
     xTaskCreate(pid_controller_task, "pid_controller_task", configMINIMAL_STACK_SIZE * 4, NULL, 6, NULL);
+    motor_command_queue = xQueueCreate(1, sizeof(motor_command_t));
+    if (motor_command_queue == NULL) {
+        ESP_LOGE("MAIN", "Error al crear la cola del motor.");
+        return;
+    }
+
+    // Crear la tarea del controlador PID
+    xTaskCreate(pid_controller_task, "PID_Controller", 4096, NULL, 5, NULL); // Ajusta stack size y prioridad
+    
+    // Crear la tarea del control del motor
+    xTaskCreate(motor_control_task, "Motor_Control", 4096, NULL, 4, NULL);
 
     // Tarea para manejar los comandos recibidos por el puerto serie
     xTaskCreate(uart_echo_task, "uart_echo_task", configMINIMAL_STACK_SIZE * 3, NULL, 4, NULL);

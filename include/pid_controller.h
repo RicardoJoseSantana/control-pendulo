@@ -10,6 +10,7 @@
  * Se ejecuta a una frecuencia fija para leer el sensor y controlar el motor.
  */
 void pid_controller_task(void *arg);
+void motor_control_task(void *arg);
 
 /**
  * @brief Habilita o deshabilita el bucle de control del PID.
