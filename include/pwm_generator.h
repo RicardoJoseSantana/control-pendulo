@@ -6,7 +6,7 @@
 #include "driver/ledc.h" // Módulo LEDC para PWM
 #include "esp_log.h"
 #include "uart_echo.h" // Para incluir la estructura pwm_command_t y la cola
-#include "pwm_generator.h"
+//#include "pwm_generator.h"
 
 // Definiciones para el PWM
 #define LEDC_TIMER              LEDC_TIMER_0
@@ -24,6 +24,6 @@ void execute_movement(int num_pulses, int frequency, int direction);
 // Declaración de la tarea del generador PWM
 void pwm_generator_task(void *arg);
 
-void ledc_init(void);
+void pwm_init(void);
 
 #endif // PWM_GENERATOR_H

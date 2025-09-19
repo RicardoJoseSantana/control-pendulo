@@ -10,6 +10,7 @@
  * Se ejecuta a una frecuencia fija para leer el sensor y controlar el motor.
  */
 void pid_controller_task(void *arg);
+void motor_control_task(void *arg);
 
 /**
  * @brief Habilita o deshabilita el bucle de control del PID.
@@ -43,5 +44,9 @@ int16_t pid_get_setpoint(void);
  * @return true si está habilitado, false si no.
  */
 bool pid_is_enabled(void);
+
+//para parada de emergencia.
+
+void pid_force_disable(void);
 
 #endif // PID_CONTROLLER_H

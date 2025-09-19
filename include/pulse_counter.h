@@ -28,6 +28,6 @@ void pulse_counter_task(void *arg);*/
  * 
  * Debe ser llamada una sola vez al inicio del programa.
  */
-void pcnt_and_z_index_init(void);
+void pulse_counter_init(void);
 
 #endif // PULSE_COUNTER_H

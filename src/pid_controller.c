@@ -8,6 +8,7 @@
 #include "esp_log.h"
 #include "pulse_counter.h" // Para leer la posición del encoder
 #include "pwm_generator.h" // Para la función que mueve el motor
+#include "uart_echo.h"
 
 /************************************************************************************
  *                                                                                  *
@@ -19,7 +20,7 @@
 // Frecuencia a la que se ejecutará el bucle de control. 50 Hz es un buen punto
 // de partida para sistemas mecánicos. Un valor más bajo es menos reactivo, uno
 // más alto consume más CPU y puede ser más sensible al ruido.
-#define PID_LOOP_PERIOD_MS 20 // Frecuencia del bucle: 1000ms / 20ms = 50 Hz
+#define PID_LOOP_PERIOD_MS 10 // Frecuencia del bucle: 1000ms / 20ms = 50 Hz
 
 // --- PARÁMETROS DE CONTROL ---
 // El punto de equilibrio deseado. Gracias a la señal Z del encoder que resetea
@@ -29,7 +30,7 @@
 // Banda muerta (Dead Band). Si el error (en cuentas del encoder) es menor que
 // este valor, lo consideramos cero. Esto es CRUCIAL para evitar que el motor
 // vibre o "tiemble" constantemente tratando de corregir errores minúsculos.
-#define DEAD_BAND_PULSES 10
+#define DEAD_BAND_PULSES 5
 
 // Evita que el término integral crezca indefinidamente y desestabilice el sistema.
 // Este valor debe ser menor o igual a MAX_OUTPUT_PULSES.
@@ -42,12 +43,12 @@
 #define MAX_OUTPUT_PULSES 1000
 
 // Frecuencia base (velocidad mínima) para los movimientos de corrección.
-#define BASE_FREQUENCY 6000
+#define BASE_FREQUENCY 1000
 
 // Factor de escalado de velocidad. Hace que la corrección sea más rápida
 // para errores grandes. La frecuencia final será:
 // Frecuencia = BASE_FREQUENCY + (Error * FREQ_PER_ERROR_PULSE)
-#define FREQ_PER_ERROR_PULSE 80.0f
+#define FREQ_PER_ERROR_PULSE 50.0f
 
 /************************************************************************************
  *                        FIN DE LA CONFIGURACIÓN DE PARÁMETROS                     *
@@ -116,12 +117,34 @@ int16_t pid_get_setpoint(void)
     return g_setpoint;
 }
 
+// --- AÑADIDO: Implementación de la función de deshabilitación forzada ---
+void pid_force_disable(void)
+{
+    if (g_pid_enabled)
+    { // Solo actúa y muestra el mensaje si estaba habilitado
+        g_pid_enabled = false;
+        // Reseteamos el estado para un futuro arranque limpio
+        g_integral = 0.0;
+        g_last_error = 0.0;
+        ESP_LOGE(TAG, "¡PARADA DE EMERGENCIA! Control PID DESHABILITADO.");
+    }
+}
+
 bool pid_is_enabled(void)
 {
     return g_pid_enabled;
 }
 
 // --- Tarea Principal del Controlador ---
+
+typedef struct
+{
+    int num_pulses;
+    int frequency;
+    int direction;
+} motor_command_t;
+
+extern QueueHandle_t motor_command_queue;
 
 void pid_controller_task(void *arg)
 {
@@ -146,7 +169,6 @@ void pid_controller_task(void *arg)
         int16_t current_position = pulse_counter_get_value();
 
         // 2. CALCULAR ERROR: La diferencia entre donde queremos estar (0) y donde estamos
-        // float error = SETPOINT - current_position;
         float error = g_setpoint - current_position;
 
         // 3. APLICAR BANDA MUERTA
@@ -176,7 +198,7 @@ void pid_controller_task(void *arg)
 
         // --- Término Derivativo (D) ---
         // Calcula la "velocidad" del error (cuánto cambió desde el último ciclo)
-        float derivative = (error - g_last_error) / PID_LOOP_PERIOD_S;
+        float derivative = (error - g_last_error); // / PID_LOOP_PERIOD_S;
         float d_term = g_kd * derivative;
 
         // Sumamos los términos para obtener la salida final
@@ -188,23 +210,96 @@ void pid_controller_task(void *arg)
         if (output < -MAX_OUTPUT_PULSES)
             output = -MAX_OUTPUT_PULSES;
 
-        // 6. ACTUAR: Si la salida no es cero, mover el motor
+        // 6. ACTUAR: Si la salida no es cero, enviar comando al motor
         if (fabs(output) > 0.1)
         {
-            int num_pulses = (int)fabs(output);
+            motor_command_t cmd;
+            cmd.num_pulses = (int)fabs(output);
 
             // Si output es positivo, el péndulo cayó a la izquierda (posición negativa, error positivo).
             // Necesitamos movernos a la izquierda para corregir. Asumimos dir=0 es izquierda.
             // Si output es negativo, el péndulo cayó a la derecha (posición positiva, error negativo).
             // Necesitamos movernos a la derecha. Asumimos dir=1 es derecha.
             // NOTA: Si el motor se mueve en sentido contrario, invierte la lógica aquí (0 : 1)
-            int direction = (output > 0) ? 1 : 0;
+            cmd.direction = (output > 0) ? 1 : 0;
 
-            int frequency = BASE_FREQUENCY + (int)(fabs(output) * FREQ_PER_ERROR_PULSE);
+            cmd.frequency = BASE_FREQUENCY + (int)(fabs(output) * FREQ_PER_ERROR_PULSE);
 
-            execute_movement(num_pulses, frequency, direction);
+            // --- CAMBIO CLAVE: Enviar comando a la cola ---
+            // Usamos xQueueOverwrite para asegurarnos de que el comando más reciente
+            // siempre esté disponible para la tarea del motor. Si el motor está
+            // ejecutando un comando antiguo, este lo sobrescribirá.
+            xQueueOverwrite(motor_command_queue, &cmd);
+        }
+        else
+        {
+            // Si la salida es cero (dentro de la banda muerta o saturada a cero),
+            // podríamos enviar un comando para detener el motor si es necesario.
+            // Por ejemplo, un comando con 0 pulsos.
+            motor_command_t stop_cmd = {.num_pulses = 0, .frequency = 0, .direction = 0};
+            xQueueOverwrite(motor_command_queue, &stop_cmd);
         }
 
         g_last_error = error; // Guardamos para el futuro término Derivativo
+    }
+}
+
+void motor_control_task(void *arg)
+{
+    motor_command_t received_cmd;
+
+    // Asegúrate de que los pines del motor y LEDC estén inicializados aquí o antes.
+    // ledc_timer_config(&ledc_timer);
+    // ledc_channel_config(&ledc_channel);
+    // gpio_set_direction(LEDC_DIRECTION_IO, GPIO_MODE_OUTPUT);
+
+    while (1)
+    {
+        // Espera indefinidamente por un comando en la cola.
+        // xQueueReceive devuelve pdTRUE si un ítem fue copiado a received_cmd.
+        if (xQueueReceive(motor_command_queue, &received_cmd, portMAX_DELAY) == pdTRUE)
+        {
+            // Si num_pulses es 0, significa una instrucción para detener el motor
+            if (received_cmd.num_pulses == 0)
+            {
+                // Detener la generación de pulsos (si ya no lo está)
+                ESP_ERROR_CHECK(ledc_set_duty(LEDC_MODE, LEDC_CHANNEL, 0));
+                ESP_ERROR_CHECK(ledc_update_duty(LEDC_MODE, LEDC_CHANNEL));
+                gpio_set_level(LEDC_DIRECTION_IO, 0); // O mantener la última dirección, según el requisito
+                // ESP_LOGI(TAG, "Motor detenido por comando de 0 pulsos.");
+                continue; // Esperar el siguiente comando
+            }
+
+            // 1. Establecer la dirección
+            gpio_set_level(LEDC_DIRECTION_IO, received_cmd.direction);
+            // ESP_LOGI(TAG, "Pin de dirección (GPIO %d) puesto a %d", LEDC_DIRECTION_IO, received_cmd.direction);
+
+            // 2. Ajustar la frecuencia del PWM dinámicamente
+            ESP_ERROR_CHECK(ledc_set_freq(LEDC_MODE, LEDC_TIMER, received_cmd.frequency));
+            // ESP_LOGI(TAG, "Frecuencia del PWM ajustada a %d Hz", received_cmd.frequency);
+
+            // 3. Calcular la duración del movimiento en milisegundos
+            uint32_t duration_ms = (uint32_t)(received_cmd.num_pulses * 1000) / received_cmd.frequency;
+            // ESP_LOGI(TAG, "Duración calculada: %lu ms", duration_ms);
+
+            // 4. Iniciar la generación de pulsos (50% duty cycle)
+            int duty_cycle = (1 << LEDC_DUTY_RES) / 2;
+            ESP_ERROR_CHECK(ledc_set_duty(LEDC_MODE, LEDC_CHANNEL, duty_cycle));
+            ESP_ERROR_CHECK(ledc_update_duty(LEDC_MODE, LEDC_CHANNEL));
+
+            // 5. Esperar el tiempo calculado
+            // Es importante que esta tarea sea la única que controla el PWM del motor.
+            // Si el PID envía un nuevo comando mientras el motor está "vTaskDelay",
+            // el nuevo comando sobrescribirá el anterior en la cola.
+            // Aquí, la tarea del motor terminará su delay y luego procesará el nuevo comando.
+            vTaskDelay(pdMS_TO_TICKS(duration_ms));
+
+            // 6. Detener la generación de pulsos al finalizar el comando actual
+            ESP_ERROR_CHECK(ledc_set_duty(LEDC_MODE, LEDC_CHANNEL, 0));
+            ESP_ERROR_CHECK(ledc_update_duty(LEDC_MODE, LEDC_CHANNEL));
+            gpio_set_level(LEDC_DIRECTION_IO, 0); // Resetear dirección después del movimiento
+
+            // ESP_LOGI(TAG, "Movimiento finalizado.");
+        }
     }
 }
