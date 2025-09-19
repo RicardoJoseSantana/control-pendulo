@@ -8,6 +8,7 @@
 #include "uart_echo.h" // Incluimos para acceder a la cola y la estructura de comando
 #include "pid_controller.h"
 #include "pwm_generator.h"
+#include "system_status.h" // Para manejar el estado del movimiento manual
 
 // --- PINES DE LOS BOTONES ---
 #define SEQUENCE_BUTTON_GPIO GPIO_NUM_0
@@ -95,6 +96,7 @@ void button_handler_task(void *arg) {
 
             // Si se presiona el botón izquierdo Y no el derecho
             if (left_button_state == 0 && right_button_state == 1) {
+                status_set_manual_move_state(MANUAL_MOVE_LEFT); //Reportar estado
                 // Por seguridad, podríamos comprobar si el PID está deshabilitado aquí
                 ESP_LOGD(TAG, "Moviendo a la izquierda...");
                 // Asumimos que la dirección 0 es izquierda
@@ -102,13 +104,23 @@ void button_handler_task(void *arg) {
             }
             // Si se presiona el botón derecho Y no el izquierdo
             else if (right_button_state == 0 && left_button_state == 1) {
+                status_set_manual_move_state(MANUAL_MOVE_RIGHT); // Reportar estado
                 // Por seguridad, podríamos comprobar si el PID está deshabilitado aquí
                 ESP_LOGD(TAG, "Moviendo a la derecha...");
                 // Asumimos que la dirección 1 es derecha
                 execute_movement(MANUAL_MOVE_PULSES, MANUAL_MOVE_SPEED_HZ, 1);
             }
+            else {
+                // Si no se presiona ningún botón o ambos, detenemos el movimiento
+                status_set_manual_move_state(MANUAL_MOVE_NONE); // Reportar estado
+                // No hacemos nada. El motor se detendrá al completar los pulsos.
             }
+    } 
+    else {
+            // Si el PID está activado, nos aseguramos de que el estado manual esté limpio
+            status_set_manual_move_state(MANUAL_MOVE_NONE);
+        }
 
-        //vTaskDelay(pdMS_TO_TICKS(20)); // Sondeo cada 20ms
+    vTaskDelay(pdMS_TO_TICKS(5)); // Sondeo cada 5ms
     }
 }

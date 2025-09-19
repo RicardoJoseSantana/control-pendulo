@@ -12,20 +12,65 @@
 #include "button_handler.h" // Para la tarea de lectura del botón
 #include "pid_controller.h"
 #include "lcd_controller.h" // ¡Solo incluimos nuestro módulo!
+#include "system_status.h"
+
+void lcd_display_task(void *pvParameters)
+{
+    vTaskDelay(pdMS_TO_TICKS(500)); 
+    ESP_LOGI("LCD_TASK", "Tarea de visualización iniciada.");
+
+    while (1)
+    {
+        bool is_pid_on = pid_is_enabled();
+        
+        // Mostrar el estado del PID en la primera línea (siempre)
+        lcd_printf_line(0, "PID: %s", is_pid_on ? "ACTIVO" : "INACTIVO");
+
+        // --- LÓGICA DE VISUALIZACIÓN INTELIGENTE ---
+        if (is_pid_on) {
+            // Si el PID está ACTIVO, la prioridad es mostrar la posición
+            int16_t position = pulse_counter_get_value();
+            lcd_printf_line(1, "Pos: %d", position);
+        } else {
+            // Si el PID está INACTIVO, comprobamos si hay movimiento manual
+            manual_move_state_t move_state = status_get_manual_move_state();
+            
+            switch (move_state) {
+                case MANUAL_MOVE_LEFT:
+                    lcd_printf_line(1, "<-- Izquierda");
+                    break;
+                case MANUAL_MOVE_RIGHT:
+                    lcd_printf_line(1, "Derecha -->");
+                    break;
+                case MANUAL_MOVE_NONE:
+                default:
+                    // Si no hay movimiento manual, mostramos la posición
+                    int16_t position = pulse_counter_get_value();
+                    lcd_printf_line(1, "Pos: %d", position);
+                    break;
+            }
+        }
+        
+        vTaskDelay(pdMS_TO_TICKS(200));
+    }
+}
 
 void app_main(void)
 {
 
   lcd_init();
+  ledc_init();
+  
   lcd_clear();
 
   // Usamos nuestra nueva y potente función
   lcd_printf_line(0, "Bienvenidos...");
+  lcd_printf_line(1, "Iniciando");
+  vTaskDelay(pdMS_TO_TICKS(1000));
 
   // Tarea para manejar los comandos recibidos por el puerto serie
   xTaskCreate(uart_echo_task, "uart_echo_task", configMINIMAL_STACK_SIZE * 3, NULL, 5, NULL);
 
-  ledc_init();
   pcnt_and_z_index_init();
 
   // 3. Creación de todas las tareas de la aplicación
@@ -43,26 +88,6 @@ void app_main(void)
   // Tarea que monitorea el botón BOOT y envía comandos de "repetir"
   xTaskCreate(button_handler_task, "button_handler_task", configMINIMAL_STACK_SIZE * 3, NULL, 5, NULL);
 
-  lcd_printf_line(0, "Sistema Listo.");
-  vTaskDelay(pdMS_TO_TICKS(1000));
-
-  // --- BUCLE PRINCIPAL PARA ACTUALIZAR LA PANTALLA ---
-  while (1)
-  {
-    // 1. Obtener el estado del PID
-    bool is_pid_on = pid_is_enabled();
-
-    // 2. Obtener la posición del encoder
-    int16_t position = pulse_counter_get_value();
-
-    // 3. Mostrar la información en la pantalla
-    lcd_printf_line(0, "Control PID: %s", is_pid_on ? "ACTIVO" : "INACTIVO");
-    lcd_printf_line(1, "Pulsos: %d", position);
-    // Aquí podrías añadir más líneas para mostrar los valores de Kp, Ki, Kd
-
-    // Actualizamos la pantalla 10 veces por segundo (100 ms)
-    vTaskDelay(pdMS_TO_TICKS(100));
-  }
   /*
   // 2. Inicialización de servicios globales (primero que nada)
   // Es crucial inicializar la partición de la NVS antes de que cualquier tarea intente usarla.
