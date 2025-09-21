@@ -17,7 +17,7 @@
 #define EMERGENCY_STOP_GPIO       GPIO_NUM_34  // Botón de parada de emergencia
 
 // --- PARÁMETROS DE MOVIMIENTO MANUAL ---
-#define MANUAL_MOVE_SPEED_HZ 10000 // Velocidad constante para el movimiento manual (alta)
+#define MANUAL_MOVE_SPEED_HZ 20000 // Velocidad constante para el movimiento manual (alta)
 #define MANUAL_MOVE_PULSES   400   // Cantidad de pulsos por ciclo (movimiento suave)
 
 // --- PARÁMETROS DE MOVIMIENTO secuencia ---
@@ -54,11 +54,12 @@ void button_handler_task(void *arg) {
         // --- AÑADIDO: Lógica para la Parada de Emergencia (máxima prioridad) ---
         int current_stop_button_state = gpio_get_level(EMERGENCY_STOP_GPIO);
         if (last_stop_button_state == 1 && current_stop_button_state == 0) {
-            vTaskDelay(pdMS_TO_TICKS(50)); // Debounce
+            
             if (gpio_get_level(EMERGENCY_STOP_GPIO) == 0) {
                 // Llama a la función que solo deshabilita
                 pid_force_disable();
             }
+            vTaskDelay(pdMS_TO_TICKS(50)); // Debounce
         }
         last_stop_button_state = current_stop_button_state;
 

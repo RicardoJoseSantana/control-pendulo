@@ -30,17 +30,17 @@
 // Banda muerta (Dead Band). Si el error (en cuentas del encoder) es menor que
 // este valor, lo consideramos cero. Esto es CRUCIAL para evitar que el motor
 // vibre o "tiemble" constantemente tratando de corregir errores minúsculos.
-#define DEAD_BAND_PULSES   5
+#define DEAD_BAND_PULSES   20
 
 // Evita que el término integral crezca indefinidamente y desestabilice el sistema.
 // Este valor debe ser menor o igual a MAX_OUTPUT_PULSES.
-#define MAX_INTEGRAL       400.0f
+#define MAX_INTEGRAL       700.0f
 
 // --- PARÁMETROS DEL ACTUADOR (MOTOR) ---
 // Límite máximo de pulsos que el PID puede ordenar en una sola corrección.
 // Sirve como medida de seguridad para evitar que una reacción brusca del PID
 // genere un movimiento demasiado violento.
-#define MAX_OUTPUT_PULSES  1000
+#define MAX_OUTPUT_PULSES  1600
 
 // Frecuencia base (velocidad mínima) para los movimientos de corrección.
 #define BASE_FREQUENCY     1000
@@ -48,7 +48,7 @@
 // Factor de escalado de velocidad. Hace que la corrección sea más rápida
 // para errores grandes. La frecuencia final será:
 // Frecuencia = BASE_FREQUENCY + (Error * FREQ_PER_ERROR_PULSE)
-#define FREQ_PER_ERROR_PULSE 50.0f
+#define FREQ_PER_ERROR_PULSE 80.0f
 
 /************************************************************************************
  *                        FIN DE LA CONFIGURACIÓN DE PARÁMETROS                     *
@@ -56,15 +56,15 @@
 
 // Calculamos el tiempo del ciclo en segundos (dt) una sola vez.
 static const float PID_LOOP_PERIOD_S = PID_LOOP_PERIOD_MS / 1000.0f;
-
+static float g_smoothed_output = 0.0;
 static const char *TAG = "PID_CONTROLLER";
 
 // Variables de estado globales para el controlador
 // para 3200pulse/rev kp=5, ki=1, kd=10, para 2000pulse/rev kp=70, ki=1, kd=10
 static volatile bool g_pid_enabled = false;
-static float g_kp = 1.0;  // Ganancia Proporcional: El "presente". Reacciona al error actual.
-static float g_ki = 0.0;  // Ganancia Integral: El "pasado". Corrige errores acumulados. (DESHABILITADA)
-static float g_kd = 0.0;  // Ganancia Derivativa: El "futuro". Predice y amortigua. (DESHABILITADA)
+static float g_kp = 60.0;  // Ganancia Proporcional: El "presente". Reacciona al error actual.
+static float g_ki = 150.0;  // Ganancia Integral: El "pasado". Corrige errores acumulados. (DESHABILITADA)
+static float g_kd = 0.1;  // Ganancia Derivativa: El "futuro". Predice y amortigua. (DESHABILITADA)
 
 // --- AÑADIDO: 'g_setpoint' es ahora una variable que podemos cambiar ---
 static volatile int16_t g_setpoint = 0; // Se inicializa en 0 por defecto
@@ -157,7 +157,7 @@ void pid_controller_task(void *arg) {
 
         // Acumulamos el error en el término integral.
         // Se multiplica por (PID_LOOP_PERIOD_MS / 1000.0f) para que sea independiente de la frecuencia del bucle.
-        g_integral += error * PID_LOOP_PERIOD_S;
+        g_integral += error * PID_LOOP_PERIOD_S / 2;
 
         // Anti-Windup: Limitamos el término integral para que no crezca demasiado.
         if (g_integral > MAX_INTEGRAL) g_integral = MAX_INTEGRAL;
@@ -173,18 +173,27 @@ void pid_controller_task(void *arg) {
 
         // --- Término Derivativo (D) ---
         // Calcula la "velocidad" del error (cuánto cambió desde el último ciclo)
-        float derivative = (error - g_last_error);// / PID_LOOP_PERIOD_S;
+        float derivative = (error - g_last_error) / PID_LOOP_PERIOD_S;
         float d_term = g_kd * derivative;
 
         // Sumamos los términos para obtener la salida final
         float output = p_term + d_term + i_term;
 
         // 5. SATURAR LA SALIDA
-        if (output > MAX_OUTPUT_PULSES) output = MAX_OUTPUT_PULSES;
-        if (output < -MAX_OUTPUT_PULSES) output = -MAX_OUTPUT_PULSES;
+        //if (output > MAX_OUTPUT_PULSES) output = MAX_OUTPUT_PULSES;
+        //if (output < -MAX_OUTPUT_PULSES) output = -MAX_OUTPUT_PULSES;
+
+        // --- AÑADIDO: Filtro de Salida (Paso Bajo Simple) ---
+        // La nueva salida es un 70% de la salida anterior más un 30% de la nueva calculada.
+        // Esto "amortigua" los cambios bruscos. El 0.3 es el "factor de suavizado".
+        g_smoothed_output = (0.7f * g_smoothed_output) + (0.3f * output);
+
+        // 5. SATURAR LA SALIDA (ahora sobre la salida suavizada)
+        if (g_smoothed_output > MAX_OUTPUT_PULSES) g_smoothed_output = MAX_OUTPUT_PULSES;
+        if (g_smoothed_output < -MAX_OUTPUT_PULSES) g_smoothed_output = -MAX_OUTPUT_PULSES;
 
         // 6. ACTUAR: Si la salida no es cero, enviar comando al motor
-        if (fabs(output) > 0.1) {
+        /*if (fabs(output) > 0.1) {
             motor_command_t cmd;
             cmd.num_pulses = (int)fabs(output);
             
@@ -207,6 +216,43 @@ void pid_controller_task(void *arg) {
             // podríamos enviar un comando para detener el motor si es necesario.
             // Por ejemplo, un comando con 0 pulsos.
             motor_command_t stop_cmd = { .num_pulses = 0, .frequency = 0, .direction = 0 };
+            xQueueOverwrite(motor_command_queue, &stop_cmd);
+        }*/
+
+        if (fabs(g_smoothed_output) > 0.1) {
+            int num_pulses = (int)fabs(g_smoothed_output);
+            int direction = (g_smoothed_output > 0) ? 1 : 0; 
+            int frequency = BASE_FREQUENCY + (int)(fabs(g_smoothed_output) * FREQ_PER_ERROR_PULSE);
+
+            // --- OPTIMIZACIÓN DE CONTINUIDAD (SOLUCIÓN 1) ---
+
+            // 1. Calcular la duración teórica del movimiento
+            uint32_t duration_ms = (uint32_t)(num_pulses * 1000) / frequency;
+            
+            // 2. Solo actuar si el movimiento es significativo (dura al menos 1ms)
+            if (duration_ms > 0) {
+                
+                // 3. Asegurar que el movimiento dure al menos un ciclo de PID
+                // Si la duración calculada es más corta que nuestro ciclo de control...
+                if (duration_ms < PID_LOOP_PERIOD_MS) {
+                    // ... recalculamos el número de pulsos para que el movimiento 
+                    // llene exactamente un ciclo de control. Esto crea la continuidad.
+                    num_pulses = (uint32_t)(frequency * PID_LOOP_PERIOD_MS) / 1000;
+                }
+
+                // 4. Enviar el comando (posiblemente ajustado) a la cola del motor
+                motor_command_t cmd = {
+                    .num_pulses = num_pulses,
+                    .frequency = frequency,
+                    .direction = direction
+                };
+                xQueueOverwrite(motor_command_queue, &cmd);
+            }
+            // Si la duración era 0, simplemente no hacemos nada en este ciclo.
+
+        } else {
+            // Si la salida del PID es cero, enviamos un comando de parada explícito.
+            motor_command_t stop_cmd = { .num_pulses = 0, .frequency = 1000, .direction = 0 };
             xQueueOverwrite(motor_command_queue, &stop_cmd);
         }
         
