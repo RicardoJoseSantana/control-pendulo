@@ -13,8 +13,8 @@
 // --- PINES DE LOS BOTONES ---
 #define SEQUENCE_BUTTON_GPIO GPIO_NUM_0
 #define ENABLE_PID_BUTTON_GPIO GPIO_NUM_23   // Botón para Habilitar/Deshabilitar PID
-#define MANUAL_LEFT_BUTTON_GPIO GPIO_NUM_21  // Nuevo botón para mover a la izquierda
-#define MANUAL_RIGHT_BUTTON_GPIO GPIO_NUM_22 // Nuevo botón para mover a la derecha
+#define MANUAL_LEFT_BUTTON_GPIO GPIO_NUM_22  // Nuevo botón para mover a la izquierda
+#define MANUAL_RIGHT_BUTTON_GPIO GPIO_NUM_21 // Nuevo botón para mover a la derecha
 #define EMERGENCY_STOP_GPIO GPIO_NUM_34      // Botón de parada de emergencia
 
 // --- PARÁMETROS DE MOVIMIENTO MANUAL ---
