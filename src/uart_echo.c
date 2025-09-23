@@ -8,16 +8,9 @@
 static const char *TAG = "UART_ECHO";
 
 // Definimos la cola de comandos
-QueueHandle_t pwm_command_queue;
+// QueueHandle_t pwm_command_queue;
 
 void uart_echo_task(void *arg) {
-    // Creamos la cola aquí. ¡Es importante que se cree antes de que ambas tareas intenten usarla!
-    // El tamaño de la cola determina cuántos comandos puede almacenar antes de bloquearse
-    pwm_command_queue = xQueueCreate(10, sizeof(pwm_command_t));
-    if (pwm_command_queue == NULL) {
-        ESP_LOGE(TAG, "No se pudo crear la cola de comandos PWM");
-        vTaskDelete(NULL);
-    }
 
     uart_config_t uart_config = {
         .baud_rate = 115200,
@@ -44,7 +37,7 @@ void uart_echo_task(void *arg) {
     ESP_LOGI(TAG, "Comandos: SETKP <valor>, SETKI <valor>, SETKD <valor>");
 
     while (1) {
-        int len = uart_read_bytes(UART_PORT, data, (BUF_SIZE - 1), 20 / portTICK_PERIOD_MS);
+        int len = uart_read_bytes(UART_PORT, data, (BUF_SIZE - 1), 100 / portTICK_PERIOD_MS);
         if (len > 0) {
             data[len] = '\0';
             ESP_LOGI(TAG, "Recibido: %s", (char *) data);

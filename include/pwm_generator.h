@@ -18,12 +18,20 @@
 //#define LEDC_DUTY_RES           LEDC_TIMER_10_BIT // Resolución del ciclo de trabajo (0-1023)
 //#define LEDC_FREQUENCY          (100) // 1 kHz
 
+typedef struct
+{
+  int num_pulses;
+  int frequency;
+  int direction;
+} motor_command_t;
+
+extern QueueHandle_t motor_command_queue;
+
 // Declaración de la nueva función de acción. No es una tarea, sino una función normal.
 void execute_movement(int num_pulses, int frequency, int direction);
 
-// Declaración de la tarea del generador PWM
-void pwm_generator_task(void *arg);
-
 void pwm_init(void);
+
+void motor_control_task(void *arg);
 
 #endif // PWM_GENERATOR_H

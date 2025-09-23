@@ -40,4 +40,7 @@ void lcd_write_string(const char *str);
  */
 void lcd_printf_line(uint8_t row, const char *format, ...);
 
+// Declaración de la tarea de la visualizacion en pantalla
+void lcd_display_task(void *pvParameters);
+
 #endif // LCD_CONTROLLER_H```

@@ -5,6 +5,12 @@
 #include "hd44780.h" // La nueva librería tiene el mismo nombre de cabecera
 #include "esp_log.h"
 
+#include "system_status.h"
+#include "pid_controller.h"
+#include "pulse_counter.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+
 // --- CONFIGURACIÓN PRIVADA DEL MÓDULO (Pines sin cambios) ---
 #define LCD_RS_PIN GPIO_NUM_19
 #define LCD_E_PIN GPIO_NUM_18
@@ -96,4 +102,46 @@ void lcd_printf_line(uint8_t row, const char *format, ...)
     // Mover el cursor y escribir la línea completa
     lcd_set_cursor(0, row);
     lcd_write_string(buffer);
+}
+
+// --- Tarea dedicada para actualizar la pantalla (es la pieza clave que faltaba iniciar) ---
+void lcd_display_task(void *pvParameters)
+{
+  vTaskDelay(pdMS_TO_TICKS(500)); // Dar tiempo a que otros módulos se inicien
+  ESP_LOGI("LCD_TASK", "Tarea de visualización iniciada.");
+
+  while (1)
+  {
+    bool is_pid_on = pid_is_enabled();
+    lcd_printf_line(0, "PID: %s", is_pid_on ? "ACTIVO" : "INACTIVO");
+
+    if (is_pid_on)
+    {
+      int16_t position = pulse_counter_get_value();
+      float degrees = (float)position* 360.0f / 4096.0f;
+      lcd_printf_line(1, "Gra: %.1f", degrees);
+    }
+    else
+    {
+      manual_move_state_t move_state = status_get_manual_move_state();
+      switch (move_state)
+      {
+      case MANUAL_MOVE_LEFT:
+        lcd_printf_line(1, "Derecha -->");
+        break;
+      case MANUAL_MOVE_RIGHT:
+        lcd_printf_line(1, "<-- Izquierda");
+        break;
+      case MANUAL_MOVE_NONE:
+      default:
+        int16_t position = pulse_counter_get_value();
+        //lcd_printf_line(1, "Pos: %d", position);
+        float degrees = (float)position* 360.0f / 4096.0f;
+        //lcd_printf_line(0, "Pos: %d", position);
+        lcd_printf_line(1, "Gra: %.1f", degrees);
+        break;
+      }
+    }
+    vTaskDelay(pdMS_TO_TICKS(200));
+  }
 }

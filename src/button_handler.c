@@ -123,7 +123,13 @@ void button_handler_task(void *arg)
                 // Por seguridad, podríamos comprobar si el PID está deshabilitado aquí
                 ESP_LOGD(TAG, "Moviendo a la izquierda...");
                 // Asumimos que la dirección 0 es izquierda
-                execute_movement(MANUAL_MOVE_PULSES, MANUAL_MOVE_SPEED_HZ, 0);
+                //execute_movement(MANUAL_MOVE_PULSES, MANUAL_MOVE_SPEED_HZ, 0);
+                motor_command_t cmd = {
+                    .num_pulses = MANUAL_MOVE_PULSES,
+                    .frequency = MANUAL_MOVE_SPEED_HZ,
+                    .direction = 0
+                };
+                xQueueOverwrite(motor_command_queue, &cmd);
             }
             // Si se presiona el botón derecho Y no el izquierdo
             else if (right_button_state == 0 && left_button_state == 1)
@@ -132,7 +138,13 @@ void button_handler_task(void *arg)
                 // Por seguridad, podríamos comprobar si el PID está deshabilitado aquí
                 ESP_LOGD(TAG, "Moviendo a la derecha...");
                 // Asumimos que la dirección 1 es derecha
-                execute_movement(MANUAL_MOVE_PULSES, MANUAL_MOVE_SPEED_HZ, 1);
+                // execute_movement(MANUAL_MOVE_PULSES, MANUAL_MOVE_SPEED_HZ, 1);
+                motor_command_t cmd = {
+                    .num_pulses = MANUAL_MOVE_PULSES,
+                    .frequency = MANUAL_MOVE_SPEED_HZ,
+                    .direction = 1
+                };
+                xQueueOverwrite(motor_command_queue, &cmd);
             }
             else
             {
@@ -147,6 +159,6 @@ void button_handler_task(void *arg)
             status_set_manual_move_state(MANUAL_MOVE_NONE);
         }
 
-        vTaskDelay(pdMS_TO_TICKS(5)); // Sondeo cada 5ms
+        vTaskDelay(pdMS_TO_TICKS(20)); // Sondeo mayor o igual a 10ms 10ms
     }
 }

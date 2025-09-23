@@ -13,7 +13,7 @@
 #define ENCODER_INDEX_Z_PIN 12 // Fase Z (índice) del encoder
 
 #define PCNT_UNIT           PCNT_UNIT_0
-static const char *TAG = "PULSE_COUNTER_PCNT";
+//static const char *TAG = "PULSE_COUNTER_PCNT";
 
 /**
  * @brief ISR para la señal Z. Resetea el contador del PCNT a cero.
@@ -77,8 +77,8 @@ void pulse_counter_init(void) {
     gpio_install_isr_service(0);
     gpio_isr_handler_add(ENCODER_INDEX_Z_PIN, encoder_index_z_isr_handler, NULL);
 
-    ESP_LOGI(TAG, "PCNT en modo cuadratura (pines A:%d, B:%d) y señal Z (pin:%d) inicializados.", 
-             PCNT_INPUT_A_PIN, PCNT_INPUT_B_PIN, ENCODER_INDEX_Z_PIN);
+    //ESP_LOGI(TAG, "PCNT en modo cuadratura (pines A:%d, B:%d) y señal Z (pin:%d) inicializados.", 
+    //         PCNT_INPUT_A_PIN, PCNT_INPUT_B_PIN, ENCODER_INDEX_Z_PIN);
 }
 
 /**
@@ -89,23 +89,3 @@ int16_t pulse_counter_get_value(void) {
     pcnt_get_counter_value(PCNT_UNIT, &count);
     return count;
 }
-
-/**
- * @brief Tarea principal del módulo para inicialización y depuración.
- */
-/*void pulse_counter_task(void *arg) {
-    pcnt_and_z_index_init();
-
-    // Este bucle solo sirve para depuración.
-    int16_t last_value = 0;
-    while (1) {
-        int16_t current_value = pulse_counter_get_value();
-        if(current_value != last_value) {
-            ESP_LOGI(TAG, "Posición del Encoder: %d", current_value);
-            last_value = current_value;
-        }
-        // Gira el encoder. Deberías ver los valores cambiar entre -2048 y 2047 aprox.,
-        // y resetearse a 0 al pasar por la señal Z. Una vuelta completa son 4096 cuentas.
-        vTaskDelay(pdMS_TO_TICKS(100));
-    }
-}*/

@@ -60,7 +60,7 @@ static float g_smoothed_output = 0.0;
 static const char *TAG = "PID_CONTROLLER";
 
 // Variables de estado globales para el controlador
-// para 3200pulse/rev kp=5, ki=1, kd=10, para 2000pulse/rev kp=70, ki=1, kd=10
+// para 3200pulse/rev kp=5, ki=1, kd=10, para 2000pulse/rev kp=70, ki=1, kd=10, para 10000pulse/rev kp=60, ki=150, kd=0.1
 static volatile bool g_pid_enabled = false;
 static float g_kp = 60.0;  // Ganancia Proporcional: El "presente". Reacciona al error actual.
 static float g_ki = 150.0;  // Ganancia Integral: El "pasado". Corrige errores acumulados. (DESHABILITADA)
@@ -136,15 +136,6 @@ bool pid_is_enabled(void)
 }
 
 // --- Tarea Principal del Controlador ---
-
-typedef struct
-{
-    int num_pulses;
-    int frequency;
-    int direction;
-} motor_command_t;
-
-extern QueueHandle_t motor_command_queue;
 
 void pid_controller_task(void *arg)
 {
@@ -287,62 +278,3 @@ void pid_controller_task(void *arg)
     }
 }
 
-void motor_control_task(void *arg)
-{
-    motor_command_t received_cmd;
-
-    // Asegúrate de que los pines del motor y LEDC estén inicializados aquí o antes.
-    // ledc_timer_config(&ledc_timer);
-    // ledc_channel_config(&ledc_channel);
-    // gpio_set_direction(LEDC_DIRECTION_IO, GPIO_MODE_OUTPUT);
-
-    while (1)
-    {
-        // Espera indefinidamente por un comando en la cola.
-        // xQueueReceive devuelve pdTRUE si un ítem fue copiado a received_cmd.
-        if (xQueueReceive(motor_command_queue, &received_cmd, portMAX_DELAY) == pdTRUE)
-        {
-            // Si num_pulses es 0, significa una instrucción para detener el motor
-            if (received_cmd.num_pulses == 0)
-            {
-                // Detener la generación de pulsos (si ya no lo está)
-                ESP_ERROR_CHECK(ledc_set_duty(LEDC_MODE, LEDC_CHANNEL, 0));
-                ESP_ERROR_CHECK(ledc_update_duty(LEDC_MODE, LEDC_CHANNEL));
-                gpio_set_level(LEDC_DIRECTION_IO, 0); // O mantener la última dirección, según el requisito
-                // ESP_LOGI(TAG, "Motor detenido por comando de 0 pulsos.");
-                continue; // Esperar el siguiente comando
-            }
-
-            // 1. Establecer la dirección
-            gpio_set_level(LEDC_DIRECTION_IO, received_cmd.direction);
-            // ESP_LOGI(TAG, "Pin de dirección (GPIO %d) puesto a %d", LEDC_DIRECTION_IO, received_cmd.direction);
-
-            // 2. Ajustar la frecuencia del PWM dinámicamente
-            ESP_ERROR_CHECK(ledc_set_freq(LEDC_MODE, LEDC_TIMER, received_cmd.frequency));
-            // ESP_LOGI(TAG, "Frecuencia del PWM ajustada a %d Hz", received_cmd.frequency);
-
-            // 3. Calcular la duración del movimiento en milisegundos
-            uint32_t duration_ms = (uint32_t)(received_cmd.num_pulses * 1000) / received_cmd.frequency;
-            // ESP_LOGI(TAG, "Duración calculada: %lu ms", duration_ms);
-
-            // 4. Iniciar la generación de pulsos (50% duty cycle)
-            int duty_cycle = (1 << LEDC_DUTY_RES) / 2;
-            ESP_ERROR_CHECK(ledc_set_duty(LEDC_MODE, LEDC_CHANNEL, duty_cycle));
-            ESP_ERROR_CHECK(ledc_update_duty(LEDC_MODE, LEDC_CHANNEL));
-
-            // 5. Esperar el tiempo calculado
-            // Es importante que esta tarea sea la única que controla el PWM del motor.
-            // Si el PID envía un nuevo comando mientras el motor está "vTaskDelay",
-            // el nuevo comando sobrescribirá el anterior en la cola.
-            // Aquí, la tarea del motor terminará su delay y luego procesará el nuevo comando.
-            vTaskDelay(pdMS_TO_TICKS(duration_ms));
-
-            // 6. Detener la generación de pulsos al finalizar el comando actual
-            ESP_ERROR_CHECK(ledc_set_duty(LEDC_MODE, LEDC_CHANNEL, 0));
-            ESP_ERROR_CHECK(ledc_update_duty(LEDC_MODE, LEDC_CHANNEL));
-            gpio_set_level(LEDC_DIRECTION_IO, 0); // Resetear dirección después del movimiento
-
-            // ESP_LOGI(TAG, "Movimiento finalizado.");
-        }
-    }
-}
