@@ -13,8 +13,8 @@
 // --- PINES DE LOS BOTONES ---
 #define SEQUENCE_BUTTON_GPIO GPIO_NUM_0
 #define ENABLE_PID_BUTTON_GPIO GPIO_NUM_23   // Botón para Habilitar/Deshabilitar PID
-#define MANUAL_LEFT_BUTTON_GPIO GPIO_NUM_22  // Nuevo botón para mover a la izquierda
-#define MANUAL_RIGHT_BUTTON_GPIO GPIO_NUM_21 // Nuevo botón para mover a la derecha
+#define MANUAL_LEFT_BUTTON_GPIO GPIO_NUM_21  // Nuevo botón para mover a la izquierda
+#define MANUAL_RIGHT_BUTTON_GPIO GPIO_NUM_22 // Nuevo botón para mover a la derecha
 #define EMERGENCY_STOP_GPIO GPIO_NUM_34      // Botón de parada de emergencia
 
 // --- PARÁMETROS DE MOVIMIENTO MANUAL ---
@@ -118,18 +118,18 @@ void button_handler_task(void *arg)
             int right_button_state = gpio_get_level(MANUAL_RIGHT_BUTTON_GPIO);
 
             // Si se presiona el botón izquierdo Y no el derecho
-            if (left_button_state == 0 && right_button_state == 1)
+            if (left_button_state == 1 && right_button_state == 0)
             {
-                status_set_manual_move_state(MANUAL_MOVE_LEFT); // Reportar estado
+                status_set_manual_move_state(MANUAL_MOVE_RIGHT); // Reportar estado
                 // Por seguridad, podríamos comprobar si el PID está deshabilitado aquí
                 ESP_LOGD(TAG, "Moviendo a la izquierda...");
                 // Asumimos que la dirección 0 es izquierda
                 execute_movement(MANUAL_MOVE_PULSES, MANUAL_MOVE_SPEED_HZ, 0);
             }
             // Si se presiona el botón derecho Y no el izquierdo
-            else if (right_button_state == 0 && left_button_state == 1)
+            else if (right_button_state == 1 && left_button_state == 0)
             {
-                status_set_manual_move_state(MANUAL_MOVE_RIGHT); // Reportar estado
+                status_set_manual_move_state(MANUAL_MOVE_LEFT); // Reportar estado
                 // Por seguridad, podríamos comprobar si el PID está deshabilitado aquí
                 ESP_LOGD(TAG, "Moviendo a la derecha...");
                 // Asumimos que la dirección 1 es derecha

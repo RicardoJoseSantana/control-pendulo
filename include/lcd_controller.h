@@ -8,6 +8,8 @@
  *
  * Debe ser llamada una vez al inicio del programa.
  */
+void lcd_display_task(void *arg);
+
 void lcd_init(void);
 
 /**

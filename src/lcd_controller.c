@@ -1,9 +1,16 @@
 #include "lcd_controller.h"
 #include <stdio.h>   // Para vsnprintf
-#include <stdarg.h>  // Para va_list, va_start, va_end
+#include <stdarg.h> // Para va_list y macros relacionadas
 #include <string.h>  // Necesario para memset
 #include "hd44780.h" // La nueva librería tiene el mismo nombre de cabecera
 #include "esp_log.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#include "pid_controller.h"
+#include "pulse_counter.h"
+#include "system_status.h"
+#include "driver/gpio.h"
+#include "esp_rom_sys.h"
 
 // --- CONFIGURACIÓN PRIVADA DEL MÓDULO (Pines sin cambios) ---
 #define LCD_RS_PIN GPIO_NUM_19
@@ -12,6 +19,7 @@
 #define LCD_D5_PIN GPIO_NUM_17
 #define LCD_D6_PIN GPIO_NUM_16
 #define LCD_D7_PIN GPIO_NUM_4
+#define LCD_RW_PIN GPIO_NUM_2       // Pin para lectura y escritura
 #define LCD_BL_PIN HD44780_NOT_USED // No controlamos el backlight por GPIO
 
 // Etiqueta para los logs
@@ -20,10 +28,53 @@ static const char *TAG = "LCD_CONTROLLER";
 // Variable estática para el descriptor del dispositivo LCD
 static hd44780_t lcd_handle;
 
+// --- ¡NUEVA FUNCIÓN! Intenta leer el Busy Flag para ver si la LCD responde ---
+static bool is_lcd_responsive(void)
+{
+    // 1. Configurar temporalmente D7 como entrada y R/W como salida
+    gpio_set_direction(LCD_RS_PIN, GPIO_MODE_OUTPUT);
+    gpio_set_direction(LCD_RW_PIN, GPIO_MODE_OUTPUT);
+    gpio_set_direction(LCD_E_PIN, GPIO_MODE_OUTPUT);
+    gpio_set_direction(LCD_D7_PIN, GPIO_MODE_INPUT);
+    gpio_set_pull_mode(LCD_D7_PIN, GPIO_PULLUP_ONLY);
+
+    // 2. Poner la pantalla en modo LECTURA de COMANDO
+    gpio_set_level(LCD_RS_PIN, 0); // Comando
+    gpio_set_level(LCD_RW_PIN, 1); // Lectura
+    gpio_set_level(LCD_E_PIN, 0);
+
+    // 3. Dar un pulso en el pin E para que la LCD ponga el Busy Flag en D7
+
+    esp_rom_delay_us(1); // Pequeña espera
+    gpio_set_level(LCD_E_PIN, 1);
+    esp_rom_delay_us(1); // Pequeña espera
+    
+
+    // 4. Leer el estado de D7. Si la LCD está alimentada, debería tirar de él a 0.
+    // Si está apagada, nuestro pull-up lo mantendrá en 1.
+    int level = gpio_get_level(LCD_D7_PIN); //Leer mientras E está en alto
+
+    // 5. Finalizar el pulso y volver al modo ESCRITURA
+    gpio_set_level(LCD_E_PIN, 0);
+    gpio_set_level(LCD_RW_PIN, 0); // Volver al modo Escritura por defecto
+    gpio_set_level(LCD_RS_PIN, 0); // Volver al modo Escritura por defecto
+
+    // Si leímos un nivel BAJO (0), significa que la pantalla respondió.
+    return (level == 0);
+}
+
 // --- IMPLEMENTACIÓN DE LAS FUNCIONES PÚBLICAS (Adaptadas a la nueva librería) ---
 
 void lcd_init(void)
 {
+    // Bucle de espera: Intentar conectar hasta que responda
+    while (!is_lcd_responsive())
+    {
+        ESP_LOGW(TAG, "Pantalla no detectada. Reintentando en 1 segundo...");
+        vTaskDelay(pdMS_TO_TICKS(1000));
+    }
+
+    ESP_LOGI(TAG, "¡Pantalla detectada! Inicializando librería hd44780...");
     // Limpiar la estructura de configuración por seguridad
     memset(&lcd_handle, 0, sizeof(hd44780_t));
 
@@ -47,10 +98,25 @@ void lcd_init(void)
     lcd_handle.write_cb = NULL;
     // Opcional: El estado del backlight. Como no lo controlamos, lo dejamos en false.
     lcd_handle.backlight = false;
+    /*
+    // Antes de llamar a la librería, configuramos todos los pines nosotros.
+    // El pin RW también se configura como salida, empezando en BAJO (modo escritura).
+    gpio_config_t io_conf = {
+        .pin_bit_mask = ((1ULL << LCD_RS_PIN) | (1ULL << LCD_E_PIN) | (1ULL << LCD_RW_PIN) |
+                         (1ULL << LCD_D4_PIN) | (1ULL << LCD_D5_PIN) | (1ULL << LCD_D6_PIN) |
+                         (1ULL << LCD_D7_PIN)),
+        .mode = GPIO_MODE_OUTPUT,
+    };
+    gpio_config(&io_conf);
+    gpio_set_level(LCD_RW_PIN, 0);
 
-    ESP_LOGI(TAG, "Initializing LCD (Direct GPIO)...");
+    ESP_LOGI(TAG, "Esperando a que la pantalla LCD esté disponible...");
+
+    */
+
+    // Ahora que sabemos que está viva, dejamos que la librería la inicialice
     hd44780_init(&lcd_handle);
-    ESP_LOGI(TAG, "LCD Initialized.");
+    ESP_LOGI(TAG, "LCD inicializada correctamente por la librería.");
 }
 
 void lcd_clear(void)
@@ -73,27 +139,76 @@ void lcd_write_string(const char *str)
     // La función para escribir una cadena ahora se llama hd44780_puts()
     hd44780_puts(&lcd_handle, str);
 }
-// --- NUEVA FUNCIÓN ---
 void lcd_printf_line(uint8_t row, const char *format, ...)
 {
-    // Buffer para la línea completa (20 chars + nulo)
-    char buffer[21];
+// --- CORRECCIÓN 2: Ajustar al tamaño real de la pantalla ---
+// Definimos el ancho de la pantalla para no usar "números mágicos"
+#define LCD_LINE_WIDTH 16 // Cambia a 20 si usas una 20x4
 
-    // Procesar los argumentos variables (como en printf)
+    // El búfer debe ser 1 más grande que el ancho para el terminador nulo '\0'
+    char buffer[LCD_LINE_WIDTH + 1];
+
+    // Procesar los argumentos variables
     va_list args;
     va_start(args, format);
-    // Usamos vsnprintf para escribir de forma segura en el buffer
+    // vsnprintf es seguro y no escribirá más allá del tamaño del búfer
     int len = vsnprintf(buffer, sizeof(buffer), format, args);
     va_end(args);
 
+    // Si vsnprintf escribió más caracteres de los que caben, lo truncamos.
+    if (len > LCD_LINE_WIDTH)
+    {
+        len = LCD_LINE_WIDTH;
+    }
+
     // Rellenar el resto del buffer con espacios
-    for (int i = len; i < 20; i++)
+    for (int i = len; i < LCD_LINE_WIDTH; i++)
     {
         buffer[i] = ' ';
     }
-    buffer[20] = '\0'; // Asegurar el terminador nulo
+    // Asegurar el terminador nulo al final
+    buffer[LCD_LINE_WIDTH] = '\0';
 
-    // Mover el cursor y escribir la línea completa
-    lcd_set_cursor(0, row);
+    // --- CORRECCIÓN 1: Posicionar el cursor correctamente ---
+    // La función es lcd_set_cursor(columna, fila)
+    lcd_set_cursor(0, row); // Siempre empezamos en la columna 0 de la fila deseada
     lcd_write_string(buffer);
+}
+
+// --- Tarea dedicada para actualizar la pantalla (es la pieza clave que faltaba iniciar) ---
+void lcd_display_task(void *pvParameters)
+{
+    vTaskDelay(pdMS_TO_TICKS(500)); // Dar tiempo a que otros módulos se inicien
+    ESP_LOGI("LCD_TASK", "Tarea de visualización iniciada.");
+
+    while (1)
+    {
+        bool is_pid_on = pid_is_enabled();
+        lcd_printf_line(0, "PID: %s", is_pid_on ? "ACTIVO" : "INACTIVO");
+
+        if (is_pid_on)
+        {
+            int16_t position = pulse_counter_get_value();
+            lcd_printf_line(1, "Pos: %d", position);
+        }
+        else
+        {
+            manual_move_state_t move_state = status_get_manual_move_state();
+            switch (move_state)
+            {
+            case MANUAL_MOVE_LEFT:
+                lcd_printf_line(1, "<-- Izquierda");
+                break;
+            case MANUAL_MOVE_RIGHT:
+                lcd_printf_line(1, "Derecha -->");
+                break;
+            case MANUAL_MOVE_NONE:
+            default:
+                int16_t position = pulse_counter_get_value();
+                lcd_printf_line(1, "Pos: %d", position);
+                break;
+            }
+        }
+        vTaskDelay(pdMS_TO_TICKS(200));
+    }
 }
