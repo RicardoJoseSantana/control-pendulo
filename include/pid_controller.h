@@ -1,7 +1,7 @@
 // src/pid_controller.h
 #ifndef PID_CONTROLLER_H
 #define PID_CONTROLLER_H
-    
+
 #include <stdbool.h>
 #include <stdint.h>
 
@@ -45,8 +45,13 @@ int16_t pid_get_setpoint(void);
  */
 bool pid_is_enabled(void);
 
-//para parada de emergencia.
+// para parada de emergencia.
 
 void pid_force_disable(void);
+
+// --- AÑADIDO: Funciones para obtener los valores de las ganancias ---
+float pid_get_kp(void);
+float pid_get_ki(void);
+float pid_get_kd(void);
 
 #endif // PID_CONTROLLER_H

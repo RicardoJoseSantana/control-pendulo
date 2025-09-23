@@ -11,6 +11,7 @@
 #include "system_status.h" // Para manejar el estado del movimiento manual
 
 // --- PINES DE LOS BOTONES ---
+#define VIEW_CYCLE_BUTTON_GPIO GPIO_NUM_15 // ¡NUEVO BOTÓN!
 #define SEQUENCE_BUTTON_GPIO GPIO_NUM_0
 #define ENABLE_PID_BUTTON_GPIO GPIO_NUM_23   // Botón para Habilitar/Deshabilitar PID
 #define MANUAL_LEFT_BUTTON_GPIO GPIO_NUM_21  // Nuevo botón para mover a la izquierda
@@ -38,7 +39,8 @@ void button_handler_task(void *arg)
         .pin_bit_mask = ((1ULL << ENABLE_PID_BUTTON_GPIO) |
                          (1ULL << MANUAL_LEFT_BUTTON_GPIO) |
                          (1ULL << MANUAL_RIGHT_BUTTON_GPIO) |
-                         (1ULL << EMERGENCY_STOP_GPIO)),
+                         (1ULL << EMERGENCY_STOP_GPIO) |
+                         (1ULL << VIEW_CYCLE_BUTTON_GPIO)),
         .mode = GPIO_MODE_INPUT,
         .pull_up_en = GPIO_PULLUP_ENABLE,
         .pull_down_en = GPIO_PULLDOWN_DISABLE,
@@ -51,9 +53,22 @@ void button_handler_task(void *arg)
     int last_button_state = 1; // 1 = no presionado
     int last_sequence_button_state = 1;
     int last_stop_button_state = 1;
+    int last_view_button_state = 1;
 
     while (1)
     {
+        // --- AÑADIDO: Lógica para el botón de cambio de vista ---
+        int current_view_button_state = gpio_get_level(VIEW_CYCLE_BUTTON_GPIO);
+        if (last_view_button_state == 1 && current_view_button_state == 0)
+        {
+            vTaskDelay(pdMS_TO_TICKS(50)); // Debounce
+            if (gpio_get_level(VIEW_CYCLE_BUTTON_GPIO) == 0)
+            {
+                ESP_LOGI(TAG, "Botón de cambio de vista presionado.");
+                status_cycle_lcd_view(); // ¡Llamamos a nuestra nueva función!
+            }
+        }
+        last_view_button_state = current_view_button_state;
         // --- AÑADIDO: Lógica para la Parada de Emergencia (máxima prioridad) ---
         int current_stop_button_state = gpio_get_level(EMERGENCY_STOP_GPIO);
         if (last_stop_button_state == 1 && current_stop_button_state == 0)

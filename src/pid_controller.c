@@ -72,6 +72,11 @@ static volatile int16_t g_setpoint = 0; // Se inicializa en 0 por defecto
 static float g_integral = 0.0;
 static float g_last_error = 0.0;
 
+// --- AÑADIDO: Implementación de las nuevas funciones ---
+float pid_get_kp(void) { return g_kp; }
+float pid_get_ki(void) { return g_ki; }
+float pid_get_kd(void) { return g_kd; }
+
 // --- Implementación de funciones públicas ---
 
 void pid_toggle_enable(void)

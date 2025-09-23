@@ -1,6 +1,6 @@
 #include "lcd_controller.h"
 #include <stdio.h>   // Para vsnprintf
-#include <stdarg.h> // Para va_list y macros relacionadas
+#include <stdarg.h>  // Para va_list y macros relacionadas
 #include <string.h>  // Necesario para memset
 #include "hd44780.h" // La nueva librería tiene el mismo nombre de cabecera
 #include "esp_log.h"
@@ -48,11 +48,10 @@ static bool is_lcd_responsive(void)
     esp_rom_delay_us(1); // Pequeña espera
     gpio_set_level(LCD_E_PIN, 1);
     esp_rom_delay_us(1); // Pequeña espera
-    
 
     // 4. Leer el estado de D7. Si la LCD está alimentada, debería tirar de él a 0.
     // Si está apagada, nuestro pull-up lo mantendrá en 1.
-    int level = gpio_get_level(LCD_D7_PIN); //Leer mientras E está en alto
+    int level = gpio_get_level(LCD_D7_PIN); // Leer mientras E está en alto
 
     // 5. Finalizar el pulso y volver al modo ESCRITURA
     gpio_set_level(LCD_E_PIN, 0);
@@ -183,13 +182,75 @@ void lcd_display_task(void *pvParameters)
 
     while (1)
     {
+        // 1. Obtener la vista que debemos mostrar
+        lcd_view_state_t current_view = status_get_lcd_view();
+
+        // 2. Usar un 'switch' para decidir qué dibujar
+        switch (current_view)
+        {
+        case VIEW_MAIN_STATUS:
+        {
+            bool is_pid_on = pid_is_enabled();
+            manual_move_state_t move_state = status_get_manual_move_state();
+
+            // Línea 1: Estado prioritario
+            if (move_state == MANUAL_MOVE_LEFT)
+            {
+                lcd_printf_line(0, "<-- Izquierda");
+            }
+            else if (move_state == MANUAL_MOVE_RIGHT)
+            {
+                lcd_printf_line(0, "Derecha -->");
+            }
+            else
+            {
+                lcd_printf_line(0, "PID: %s", is_pid_on ? "ACTIVO" : "INACTIVO");
+            }
+
+            // Línea 2: Posición en grados
+            int16_t position = pulse_counter_get_value();
+            float degrees = (float)position * 360.0f / 4096.0f;
+            lcd_printf_line(1, "Posicion: %.1f deg", degrees);
+            break;
+        }
+
+        case VIEW_ENCODER_COUNTS:
+        {
+            lcd_printf_line(0, "Encoder Crudo");
+            int16_t position = pulse_counter_get_value();
+            lcd_printf_line(1, "Pulsos: %d", position);
+            break;
+        }
+
+        case VIEW_PID_GAINS:
+        {
+            // Obtenemos los valores actuales del módulo PID
+            float kp = pid_get_kp();
+            float ki = pid_get_ki();
+            // Mostramos Kp y Ki en la misma línea
+            lcd_printf_line(0, "Kp:%.2f Ki:%.2f", kp, ki);
+            float kd = pid_get_kd();
+            lcd_printf_line(1, "Kd: %.2f", kd);
+            break;
+        }
+
+        default:
+            // Vista por defecto en caso de error
+            lcd_printf_line(0, "Vista Invalida");
+            lcd_printf_line(1, "");
+            break;
+        }
+        /*
         bool is_pid_on = pid_is_enabled();
         lcd_printf_line(0, "PID: %s", is_pid_on ? "ACTIVO" : "INACTIVO");
 
         if (is_pid_on)
         {
             int16_t position = pulse_counter_get_value();
-            lcd_printf_line(1, "Pos: %d", position);
+            // --- CONVERSIÓN A GRADOS ---
+            float degrees = (float)position * 360.0f / 4096.0f;
+            lcd_printf_line(1, "Pos: %.1f deg", degrees); // Muestra con 1 decimal
+            //lcd_printf_line(1, "Pos: %d", position);
         }
         else
         {
@@ -205,10 +266,13 @@ void lcd_display_task(void *pvParameters)
             case MANUAL_MOVE_NONE:
             default:
                 int16_t position = pulse_counter_get_value();
-                lcd_printf_line(1, "Pos: %d", position);
+                // --- CONVERSIÓN A GRADOS ---
+                float degrees = (float)position * 360.0f / 4096.0f;
+                lcd_printf_line(1, "Pos: %.1f deg", degrees); // Muestra con 1 decimal
+                //lcd_printf_line(1, "Pos: %d", position);
                 break;
             }
         }
-        vTaskDelay(pdMS_TO_TICKS(200));
+        vTaskDelay(pdMS_TO_TICKS(200));*/
     }
 }
