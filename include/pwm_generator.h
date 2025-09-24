@@ -28,7 +28,7 @@ typedef struct
 extern QueueHandle_t motor_command_queue;
 
 // Declaración de la nueva función de acción. No es una tarea, sino una función normal.
-void execute_movement(int num_pulses, int frequency, int direction);
+int execute_movement(int num_pulses, int frequency, int direction);
 
 void pwm_init(void);
 

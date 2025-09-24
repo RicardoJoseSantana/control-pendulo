@@ -52,8 +52,11 @@ void pwm_init(void) {
 }
 
 // --- FUNCIÓN DE ACCIÓN NUEVA Y CENTRAL ---
-void execute_movement(int num_pulses, int frequency, int direction) {
+int execute_movement(int num_pulses, int frequency, int direction) {
     //ESP_LOGI(TAG, "Ejecutando movimiento: %d pulsos a %d Hz, Dir: %d", num_pulses, frequency, direction);
+    if (num_pulses <= 0) {
+        return 0; // No hacer nada si los pulsos son cero o negativos
+    }
 
     // 1. Establecer la dirección
     gpio_set_level(LEDC_DIRECTION_IO, direction);
@@ -90,6 +93,7 @@ void execute_movement(int num_pulses, int frequency, int direction) {
     gpio_set_level(LEDC_DIRECTION_IO, 0);
     
     //ESP_LOGI(TAG, "Movimiento finalizado.");
+    return num_pulses;
 }
 
 void motor_control_task(void *arg)
