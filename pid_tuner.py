@@ -26,9 +26,9 @@ class PidTunerApp:
         self.ki_val = tk.DoubleVar(value=0.0)
         self.kd_val = tk.DoubleVar(value=0.0)
         
-        self.create_slider("Kp (Proporcional):", self.kp_val, 0, 10, self.send_kp)
-        self.create_slider("Ki (Integral):", self.ki_val, 0, 5, self.send_ki)
-        self.create_slider("Kd (Derivativo):", self.kd_val, 0, 1, self.send_kd)
+        self.create_slider("Kp (Proporcional):", self.kp_val, 0, 50, self.send_kp)
+        self.create_slider("Ki (Integral):", self.ki_val, 0, 1, self.send_ki)
+        self.create_slider("Kd (Derivativo):", self.kd_val, 0, 100, self.send_kd)
 
         # --- Consola de Salida ---
         ttk.Label(main_frame, text="Salida del ESP32:").grid(row=3, column=0, columnspan=2, sticky=tk.W, pady=(10,0))

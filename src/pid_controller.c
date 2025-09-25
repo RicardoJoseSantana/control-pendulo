@@ -34,7 +34,7 @@
 
 // Evita que el término integral crezca indefinidamente y desestabilice el sistema.
 // Este valor debe ser menor o igual a MAX_OUTPUT_PULSES.
-#define MAX_INTEGRAL       700.0f
+#define MAX_INTEGRAL       1000.0f
 
 // --- PARÁMETROS DEL ACTUADOR (MOTOR) ---
 // Límite máximo de pulsos que el PID puede ordenar en una sola corrección.
@@ -48,23 +48,23 @@
 // Factor de escalado de velocidad. Hace que la corrección sea más rápida
 // para errores grandes. La frecuencia final será:
 // Frecuencia = BASE_FREQUENCY + (Error * FREQ_PER_ERROR_PULSE)
-#define FREQ_PER_ERROR_PULSE 80.0f
+#define FREQ_PER_ERROR_PULSE 90.0f
 
 /************************************************************************************
  *                        FIN DE LA CONFIGURACIÓN DE PARÁMETROS                     *
  ************************************************************************************/
 
 // Calculamos el tiempo del ciclo en segundos (dt) una sola vez.
-static const float PID_LOOP_PERIOD_S = PID_LOOP_PERIOD_MS / 1000.0f;
+//static const float PID_LOOP_PERIOD_S = PID_LOOP_PERIOD_MS / 1000.0f;
 static float g_smoothed_output = 0.0;
 static const char *TAG = "PID_CONTROLLER";
 
 // Variables de estado globales para el controlador
-// para 3200pulse/rev kp=5, ki=1, kd=10, para 2000pulse/rev kp=70, ki=1, kd=10, para 10000pulse/rev kp=60, ki=150, kd=0.1
+// para 3200pulse/rev kp=5, ki=1, kd=10, para 2000pulse/rev kp=70, ki=1, kd=10, para 10000pulse/rev kp=41, ki=0.4, kd=70
 static volatile bool g_pid_enabled = false;
-static float g_kp = 60.0;  // Ganancia Proporcional: El "presente". Reacciona al error actual.
-static float g_ki = 150.0;  // Ganancia Integral: El "pasado". Corrige errores acumulados. (DESHABILITADA)
-static float g_kd = 0.1;  // Ganancia Derivativa: El "futuro". Predice y amortigua. (DESHABILITADA)
+static float g_kp = 41.0;  // Ganancia Proporcional: El "presente". Reacciona al error actual.
+static float g_ki = 0.4;  // Ganancia Integral: El "pasado". Corrige errores acumulados.
+static float g_kd = 70.0;  // Ganancia Derivativa: El "futuro". Predice y amortigua.
 
 // --- AÑADIDO: 'g_setpoint' es ahora una variable que podemos cambiar ---
 static volatile int16_t g_setpoint = 0; // Se inicializa en 0 por defecto
@@ -175,7 +175,7 @@ void pid_controller_task(void *arg)
 
         // Acumulamos el error en el término integral.
         // Se multiplica por (PID_LOOP_PERIOD_MS / 1000.0f) para que sea independiente de la frecuencia del bucle.
-        g_integral += error * PID_LOOP_PERIOD_S / 2;
+        g_integral += error * PID_LOOP_PERIOD_MS;
 
         // Anti-Windup: Limitamos el término integral para que no crezca demasiado.
         if (g_integral > MAX_INTEGRAL)
@@ -189,12 +189,12 @@ void pid_controller_task(void *arg)
 
         float i_term = g_ki * g_integral;
 
-        // 4. CALCULAR SALIDA DEL CONTROLADOR (Solo Proporcional por ahora)
+        // 4. CALCULAR SALIDA DEL CONTROLADOR
         float p_term = g_kp * error;
 
         // --- Término Derivativo (D) ---
         // Calcula la "velocidad" del error (cuánto cambió desde el último ciclo)
-        float derivative = (error - g_last_error) / PID_LOOP_PERIOD_S;
+        float derivative = (error - g_last_error) / PID_LOOP_PERIOD_MS;
         float d_term = g_kd * derivative;
 
         // Sumamos los términos para obtener la salida final
