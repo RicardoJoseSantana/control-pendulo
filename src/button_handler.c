@@ -17,7 +17,8 @@
 #define ENABLE_PID_BUTTON_GPIO GPIO_NUM_23   // Botón para Habilitar/Deshabilitar PID
 #define MANUAL_LEFT_BUTTON_GPIO GPIO_NUM_21  // Nuevo botón para mover a la izquierda
 #define MANUAL_RIGHT_BUTTON_GPIO GPIO_NUM_22 // Nuevo botón para mover a la derecha
-#define EMERGENCY_STOP_GPIO GPIO_NUM_34      // Botón de parada de emergencia
+#define EMERGENCY_STOP_GPIO_LEFT GPIO_NUM_34      // Botón de parada de emergencia
+#define EMERGENCY_STOP_GPIO_RIGHT GPIO_NUM_35      // Botón de parada de emergencia
 
 // --- PARÁMETROS DE MOVIMIENTO MANUAL ---
 /*#define MANUAL_MOVE_SPEED_HZ 20000 // Velocidad constante para el movimiento manual (alta)
@@ -62,7 +63,8 @@ void button_handler_task(void *arg)
         .pin_bit_mask = ((1ULL << ENABLE_PID_BUTTON_GPIO) |
                          (1ULL << MANUAL_LEFT_BUTTON_GPIO) |
                          (1ULL << MANUAL_RIGHT_BUTTON_GPIO) |
-                         (1ULL << EMERGENCY_STOP_GPIO) |
+                         (1ULL << EMERGENCY_STOP_GPIO_RIGHT) |
+                         (1ULL << EMERGENCY_STOP_GPIO_LEFT) |
                          (1ULL << VIEW_CYCLE_BUTTON_GPIO)),
         .mode = GPIO_MODE_INPUT,
         .pull_up_en = GPIO_PULLUP_ENABLE,
@@ -93,16 +95,27 @@ void button_handler_task(void *arg)
         }
         last_view_button_state = current_view_button_state;
         // --- AÑADIDO: Lógica para la Parada de Emergencia (máxima prioridad) ---
-        int current_stop_button_state = gpio_get_level(EMERGENCY_STOP_GPIO);
+        int current_stop_button_state = gpio_get_level(EMERGENCY_STOP_GPIO_RIGHT);
         if (last_stop_button_state == 1 && current_stop_button_state == 0) {
             
-            if (gpio_get_level(EMERGENCY_STOP_GPIO) == 0) {
+            if (gpio_get_level(EMERGENCY_STOP_GPIO_RIGHT) == 0) {
                 // Llama a la función que solo deshabilita
                 pid_force_disable();
             }
             vTaskDelay(pdMS_TO_TICKS(50)); // Debounce
         }
         last_stop_button_state = current_stop_button_state;
+        
+        int current_stop_button_state_new = gpio_get_level(EMERGENCY_STOP_GPIO_LEFT);
+        if (last_stop_button_state == 1 && current_stop_button_state_new == 0) {
+            
+            if (gpio_get_level(EMERGENCY_STOP_GPIO_LEFT) == 0) {
+                // Llama a la función que solo deshabilita
+                pid_force_disable();
+            }
+            vTaskDelay(pdMS_TO_TICKS(50)); // Debounce
+        }
+        last_stop_button_state = current_stop_button_state_new;
 
         int current_button_state = gpio_get_level(ENABLE_PID_BUTTON_GPIO);
 
@@ -128,19 +141,19 @@ void button_handler_task(void *arg)
             if (is_command_button_pressed(CALIBRATION_BUTTON_GPIO)) {
                 ESP_LOGW(TAG, "--- INICIANDO RUTINA DE CALIBRACIÓN DE LÍMITES ---");
                 
-                int32_t limit1_pos, limit2_pos;
+                int32_t limit_left_pos, limit_right_pos;
                 g_car_position_pulses = 0;
 
                 // 1. Mover a la izquierda hasta que el final de carrera se active
-                ESP_LOGI(TAG, "Buscando límite izquierdo (GPIO %d)...", EMERGENCY_STOP_GPIO);
+                ESP_LOGI(TAG, "Buscando límite derecho (GPIO %d)...", EMERGENCY_STOP_GPIO_RIGHT);
                 // Leemos el estado del pin directamente. El bucle continúa MIENTRAS el botón NO esté presionado.
-                while (gpio_get_level(EMERGENCY_STOP_GPIO) == 1) {
+                while (gpio_get_level(EMERGENCY_STOP_GPIO_RIGHT) == 1) {
                     int pulses_moved = execute_movement(JOG_PULSES, CALIBRATION_SPEED_HZ, 0); // Dir 0 = Izquierda
                     g_car_position_pulses -= pulses_moved;
                 }
                 // --- El bucle se rompe en cuanto el pin se va a BAJO ---
-                limit1_pos = g_car_position_pulses;
-                ESP_LOGW(TAG, "Límite 1 detectado en: %ld pulsos", limit1_pos);
+                limit_left_pos = g_car_position_pulses;
+                ESP_LOGW(TAG, "Límite 1 detectado en: %ld pulsos", limit_left_pos);
                 vTaskDelay(pdMS_TO_TICKS(200)); // Pausa para estabilizar
 
                 // --- AÑADIDO: Moverse un poco para liberar el interruptor ---
@@ -152,17 +165,17 @@ void button_handler_task(void *arg)
 
                 // 2. Mover a la derecha hasta que el final de carrera se active
                 ESP_LOGI(TAG, "Buscando límite derecho...");
-                while (gpio_get_level(EMERGENCY_STOP_GPIO) == 1) {
+                while (gpio_get_level(EMERGENCY_STOP_GPIO_LEFT) == 1) {
                     int pulses_moved = execute_movement(JOG_PULSES, CALIBRATION_SPEED_HZ, 1); // Dir 1 = Derecha
                     g_car_position_pulses += pulses_moved;
                 }
-                limit2_pos = g_car_position_pulses;
-                ESP_LOGW(TAG, "Límite 2 detectado en: %ld pulsos", limit2_pos);
+                limit_right_pos = g_car_position_pulses;
+                ESP_LOGW(TAG, "Límite 2 detectado en: %ld pulsos", limit_right_pos);
                 vTaskDelay(pdMS_TO_TICKS(200));
 
                 // 3. Calcular el centro y mover el carro
-                int32_t travel_range = abs(limit2_pos - limit1_pos);
-                int32_t center_pos = limit1_pos + (travel_range / 2);
+                int32_t travel_range = abs(limit_right_pos - limit_left_pos);
+                int32_t center_pos = limit_left_pos + (travel_range / 2);
                 ESP_LOGW(TAG, "Recorrido: %ld pulsos. Centro: %ld", travel_range, center_pos);
                 
                 ESP_LOGI(TAG, "Moviendo al centro...");
