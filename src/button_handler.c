@@ -17,8 +17,8 @@
 #define ENABLE_PID_BUTTON_GPIO GPIO_NUM_23   // Botón para Habilitar/Deshabilitar PID
 #define MANUAL_LEFT_BUTTON_GPIO GPIO_NUM_21  // Nuevo botón para mover a la izquierda
 #define MANUAL_RIGHT_BUTTON_GPIO GPIO_NUM_22 // Nuevo botón para mover a la derecha
-#define EMERGENCY_STOP_GPIO_LEFT GPIO_NUM_34      // Botón de parada de emergencia
-#define EMERGENCY_STOP_GPIO_RIGHT GPIO_NUM_35      // Botón de parada de emergencia
+#define EMERGENCY_STOP_GPIO_LEFT GPIO_NUM_34      // Botón de parada de emergencia izquierdo
+#define EMERGENCY_STOP_GPIO_RIGHT GPIO_NUM_35      // Botón de parada de emergencia derecho
 
 // --- PARÁMETROS DE MOVIMIENTO MANUAL ---
 /*#define MANUAL_MOVE_SPEED_HZ 20000 // Velocidad constante para el movimiento manual (alta)
@@ -158,8 +158,8 @@ void button_handler_task(void *arg)
 
                 // --- AÑADIDO: Moverse un poco para liberar el interruptor ---
                 ESP_LOGI(TAG, "Liberando el interruptor...");
-                execute_movement(JOG_PULSES * 4, JOG_SPEED_HZ, 1); // Mover un poco a la derecha
-                g_car_position_pulses += JOG_PULSES * 4;
+                execute_movement(JOG_PULSES * 5, JOG_SPEED_HZ, 1); // Mover un poco a la derecha
+                g_car_position_pulses += JOG_PULSES * 5;
                 vTaskDelay(pdMS_TO_TICKS(200));
 
 
@@ -195,7 +195,7 @@ void button_handler_task(void *arg)
             int right_button_state = gpio_get_level(MANUAL_RIGHT_BUTTON_GPIO);
 
             // Si se presiona el botón izquierdo Y no el derecho
-            if (left_button_state == 1 && right_button_state == 0)
+            if (left_button_state == 1 && right_button_state == 0 && gpio_get_level(EMERGENCY_STOP_GPIO_RIGHT) == 1)
             {
                 status_set_manual_move_state(MANUAL_MOVE_RIGHT); // Reportar estado
                 // Por seguridad, podríamos comprobar si el PID está deshabilitado aquí
@@ -210,7 +210,7 @@ void button_handler_task(void *arg)
                 xQueueOverwrite(motor_command_queue, &cmd);
             }
             // Si se presiona el botón derecho Y no el izquierdo
-            else if (right_button_state == 1 && left_button_state == 0)
+            else if (right_button_state == 1 && left_button_state == 0 && gpio_get_level(EMERGENCY_STOP_GPIO_LEFT) == 1)
             {
                 status_set_manual_move_state(MANUAL_MOVE_LEFT); // Reportar estado
                 // Por seguridad, podríamos comprobar si el PID está deshabilitado aquí
