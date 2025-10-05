@@ -186,6 +186,27 @@ void button_handler_task(void *arg)
                 g_car_position_pulses = center_pos;
                 
                 ESP_LOGW(TAG, "--- CALIBRACIÓN FINALIZADA. Posición: %ld ---", g_car_position_pulses);
+                ESP_LOGI(TAG, "Esperando 2 segundos para estabilizar...");
+                
+                vTaskDelay(pdMS_TO_TICKS(2000));
+
+                // --- AÑADIDO: Cálculo y establecimiento del setpoint vertical ---
+                ESP_LOGI(TAG, "Calculando setpoint vertical...");
+                
+                // 1. Leer la posición del encoder con el péndulo caído y centrado.
+                int16_t fallen_pos = pulse_counter_get_value();
+                ESP_LOGI(TAG, "Posición 'caída' detectada: %d", fallen_pos);
+
+                // 2. Calcular la posición vertical (180 grados de diferencia).
+                // Usamos el operador de módulo para manejar el "wrap-around" del contador de 16 bits.
+                int32_t vertical_setpoint_32 = fallen_pos + (ENCODER_RESOLUTION / 2);
+                int16_t vertical_setpoint_16 = (int16_t)vertical_setpoint_32; // Casting para el rango correcto
+                
+                // 3. Llamar a la función del PID para establecer el setpoint calculado.
+                pid_set_absolute_setpoint(vertical_setpoint_16);
+                
+                ESP_LOGW(TAG, "Setpoint vertical pre-calculado: %d. El sistema está listo.", vertical_setpoint_16);
+                ESP_LOGW(TAG, "Levante el péndulo y presione el botón de habilitar PID.");
             }
 
 

@@ -79,6 +79,12 @@ float pid_get_kd(void) { return g_kd; }
 
 // --- Implementación de funciones públicas ---
 
+// --- establecer el setpoint externamente ---
+void pid_set_absolute_setpoint(int16_t new_setpoint) {
+    g_setpoint = new_setpoint;
+    ESP_LOGW(TAG, "Setpoint absoluto establecido en: %d", g_setpoint);
+}
+
 void pid_toggle_enable(void)
 {
     g_pid_enabled = !g_pid_enabled;
@@ -86,9 +92,9 @@ void pid_toggle_enable(void)
     {
         // --- LÓGICA PARA ESTABLECER EL SETPOINT DINÁMICO ---
         // 1. Leer la posición actual del encoder en el momento de la habilitación.
-        int16_t current_position = pulse_counter_get_value();
+        //int16_t current_position = pulse_counter_get_value();
         // 2. Establecer esa posición como nuestro nuevo punto de equilibrio.
-        g_setpoint = current_position;
+        //g_setpoint = current_position;
 
         g_integral = 0.0;
         g_last_error = 0.0;

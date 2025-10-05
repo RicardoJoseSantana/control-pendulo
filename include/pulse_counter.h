@@ -4,6 +4,8 @@
 
 #include <stdint.h> // Para usar int16_t
 
+#define ENCODER_RESOLUTION 4096 // 1024 pulsos/rev * 4
+
 /**
  * @brief Obtiene el valor actual del contador del encoder.
  * 

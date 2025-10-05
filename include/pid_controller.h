@@ -49,6 +49,8 @@ bool pid_is_enabled(void);
 
 void pid_force_disable(void);
 
+void pid_set_absolute_setpoint(int16_t new_setpoint);
+
 // --- AÑADIDO: Funciones para obtener los valores de las ganancias ---
 float pid_get_kp(void);
 float pid_get_ki(void);
