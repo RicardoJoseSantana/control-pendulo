@@ -1,3 +1,6 @@
+/*A pesar de llamarse PID_controller,
+este modelo no se basa en un PID sino en ecuaciones de estado*/
+
 // src/pid_controller.c
 #include "pid_controller.h"
 #include <stdio.h>
@@ -10,282 +13,119 @@
 #include "pwm_generator.h" // Para la función que mueve el motor
 #include "uart_echo.h"
 
-/************************************************************************************
- *                                                                                  *
- *                   CONFIGURACIÓN DE PARÁMETROS DEL CONTROLADOR                    *
- *                                                                                  *
- ************************************************************************************/
+static const char *TAG = "STATE_EC";
 
-// --- PARÁMETROS DE TEMPORIZACIÓN ---
-// Frecuencia a la que se ejecutará el bucle de control. 50 Hz es un buen punto
-// de partida para sistemas mecánicos. Un valor más bajo es menos reactivo, uno
-// más alto consume más CPU y puede ser más sensible al ruido.
-#define PID_LOOP_PERIOD_MS 10 // Frecuencia del bucle: 1000ms / 20ms = 50 Hz
+// --- PARÁMETROS FÍSICOS (reemplaza con los tuyos) ---
+#define M_CART 0.5f  // kg
+#define M_POLE 0.2f  // kg
+#define POLE_LENGTH_M 0.3f // metros (l)
+#define PID_LOOP_PERIOD_MS 20
 
-// --- PARÁMETROS DE CONTROL ---
-// El punto de equilibrio deseado. Gracias a la señal Z del encoder que resetea
-// el contador, nuestro punto de equilibrio es siempre CERO.
-// #define SETPOINT //   0 Este es para colocar el péndulo en 0  grados para dejarlo colgado en este caso queremos que empiece en la posición colocada
+// --- GANANCIAS LQR (copia aquí los resultados de tu script de Python) ---
+static const float K1 = -3.16f;  // Ganancia para x
+static const float K2 = -5.94f;  // Ganancia para x_dot
+static const float K3 = 42.53f;  // Ganancia para theta
+static const float K4 = 4.91f;   // Ganancia para theta_dot
 
-// Banda muerta (Dead Band). Si el error (en cuentas del encoder) es menor que
-// este valor, lo consideramos cero. Esto es CRUCIAL para evitar que el motor
-// vibre o "tiemble" constantemente tratando de corregir errores minúsculos.
-#define DEAD_BAND_PULSES   20
+// --- LÍMITES Y CONVERSIONES ---
+#define MAX_CONTROL_FORCE 10.0f // Límite de la fuerza U (en Newtons) - A sintonizar
+#define FORCE_TO_ACCEL_SCALE (1.0f / (M_CART + M_POLE))
+// Necesitas la constante de tu modelo que convierte v_car a f_pulsos
+#define VELOCITY_TO_FREQ_SCALE (10000000.0f / (14.0f * 3.14159f))
 
-// Evita que el término integral crezca indefinidamente y desestabilice el sistema.
-// Este valor debe ser menor o igual a MAX_OUTPUT_PULSES.
-#define MAX_INTEGRAL       1000.0f
+static const float LOOP_PERIOD_S = PID_LOOP_PERIOD_MS / 1000.0f;
+// --- VARIABLES DE ESTADO Y SETPOINTS ---
+static volatile bool g_controller_enabled = false;
+volatile int32_t g_car_position_pulses = 0; // Odometría del carro
+static float setpoint_x_m = 0.0f;           // Objetivo de posición del carro
+static float setpoint_theta_rad = 0.0f;     // Objetivo de ángulo del péndulo
 
-// --- PARÁMETROS DEL ACTUADOR (MOTOR) ---
-// Límite máximo de pulsos que el PID puede ordenar en una sola corrección.
-// Sirve como medida de seguridad para evitar que una reacción brusca del PID
-// genere un movimiento demasiado violento.
-#define MAX_OUTPUT_PULSES  1700
+// --- IMPLEMENTACIÓN DE FUNCIONES PÚBLICAS ---
 
-// Frecuencia base (velocidad mínima) para los movimientos de corrección.
-#define BASE_FREQUENCY 1000
+// FUNCIÓN DE PARADA DE EMERGENCIA
+void state_controller_force_disable(void) {
+    if (g_controller_enabled) { // Solo actúa si el control estaba activo
+        g_controller_enabled = false;
+        
+        ESP_LOGE("STATE_CTRL", "¡PARADA DE EMERGENCIA! Controlador LQR DESHABILITADO.");
 
-// Factor de escalado de velocidad. Hace que la corrección sea más rápida
-// para errores grandes. La frecuencia final será:
-// Frecuencia = BASE_FREQUENCY + (Error * FREQ_PER_ERROR_PULSE)
-#define FREQ_PER_ERROR_PULSE 80.0f
-
-/************************************************************************************
- *                        FIN DE LA CONFIGURACIÓN DE PARÁMETROS                     *
- ************************************************************************************/
-
-// Calculamos el tiempo del ciclo en segundos (dt) una sola vez.
-//static const float PID_LOOP_PERIOD_S = PID_LOOP_PERIOD_MS / 1000.0f;
-static float g_smoothed_output = 0.0;
-static const char *TAG = "PID_CONTROLLER";
-
-// Variables de estado globales para el controlador
-// para 3200pulse/rev kp=5, ki=1, kd=10, para 2000pulse/rev kp=70, ki=1, kd=10, para 10000pulse/rev kp=41, ki=0.4, kd=70
-static volatile bool g_pid_enabled = false;
-static float g_kp = 41.0;  // Ganancia Proporcional: El "presente". Reacciona al error actual.
-static float g_ki = 0.4;  // Ganancia Integral: El "pasado". Corrige errores acumulados.
-static float g_kd = 70.0;  // Ganancia Derivativa: El "futuro". Predice y amortigua.
-
-// --- AÑADIDO: 'g_setpoint' es ahora una variable que podemos cambiar ---
-static volatile int16_t g_setpoint = 0; // Se inicializa en 0 por defecto
-
-static float g_integral = 0.0;
-static float g_last_error = 0.0;
-
-// --- AÑADIDO: Implementación de las nuevas funciones ---
-float pid_get_kp(void) { return g_kp; }
-float pid_get_ki(void) { return g_ki; }
-float pid_get_kd(void) { return g_kd; }
-
-// --- Implementación de funciones públicas ---
-
-// --- establecer el setpoint externamente ---
-void pid_set_absolute_setpoint(int16_t new_setpoint) {
-    g_setpoint = new_setpoint;
-    ESP_LOGW(TAG, "Setpoint absoluto establecido en: %d", g_setpoint);
-}
-
-void pid_toggle_enable(void)
-{
-    g_pid_enabled = !g_pid_enabled;
-    if (g_pid_enabled)
-    {
-        // --- LÓGICA PARA ESTABLECER EL SETPOINT DINÁMICO ---
-        // 1. Leer la posición actual del encoder en el momento de la habilitación.
-        //int16_t current_position = pulse_counter_get_value();
-        // 2. Establecer esa posición como nuestro nuevo punto de equilibrio.
-        //g_setpoint = current_position;
-
-        g_integral = 0.0;
-        g_last_error = 0.0;
-        ESP_LOGW(TAG, "Control PID HABILITADO");
-    }
-    else
-    {
-        ESP_LOGW(TAG, "Control PID DESHABILITADO");
+        // Enviar un comando de parada explícito a la cola del motor.
+        // Usamos xQueueOverwrite para que anule cualquier comando de movimiento pendiente.
+        motor_command_t stop_cmd = { .num_pulses = 0, .frequency = 0, .direction = 0 };
+        xQueueOverwrite(motor_command_queue, &stop_cmd);
     }
 }
 
-void pid_set_kp(float kp)
-{
-    g_kp = kp;
-    ESP_LOGI(TAG, "Kp actualizado a: %f", g_kp);
-}
-void pid_set_ki(float ki)
-{
-    g_ki = ki;
-    ESP_LOGI(TAG, "Ki actualizado a: %f", g_ki);
-}
-void pid_set_kd(float kd)
-{
-    g_kd = kd;
-    ESP_LOGI(TAG, "Kd actualizado a: %f", g_kd);
+void state_controller_toggle_enable(void) {
+    g_controller_enabled = !g_controller_enabled;
+    ESP_LOGW("STATE_CTRL", "Control LQR %s", g_controller_enabled ? "HABILITADO" : "DESHABILITADO");
 }
 
-// --- AÑADIDO: Implementación de la nueva función 'getter' ---
-int16_t pid_get_setpoint(void)
-{
-    return g_setpoint;
+bool state_controller_is_enabled(void) {
+    return g_controller_enabled;
 }
 
-// --- AÑADIDO: Implementación de la función de deshabilitación forzada ---
-void pid_force_disable(void)
-{
-    if (g_pid_enabled)
-    { // Solo actúa y muestra el mensaje si estaba habilitado
-        g_pid_enabled = false;
-        // Reseteamos el estado para un futuro arranque limpio
-        g_integral = 0.0;
-        g_last_error = 0.0;
-        ESP_LOGE(TAG, "¡PARADA DE EMERGENCIA! Control PID DESHABILITADO.");
-    }
+void state_controller_set_theta_setpoint(float setpoint_rad) {
+    setpoint_theta_rad = setpoint_rad;
+    ESP_LOGW("STATE_CTRL", "Setpoint de ángulo actualizado a: %.2f rad", setpoint_theta_rad);
 }
 
-bool pid_is_enabled(void)
-{
-    return g_pid_enabled;
-}
-
-// --- Tarea Principal del Controlador ---
-
-void pid_controller_task(void *arg)
-{
+void state_controller_task(void *arg) {
     TickType_t last_wake_time = xTaskGetTickCount();
+    
+    // Variables para estimar el estado
+    float last_theta_rad = 0.0f;
+    float current_velocity_m_s = 0.0f;
+    float setpoint_x_m = 0.0f; // Queremos que el carro esté en 0 metros
 
-    // Reseteamos el error anterior al habilitar para evitar un pico inicial en D
-    pid_toggle_enable(); // Habilita y resetea
-    pid_toggle_enable(); // Deshabilita de nuevo, pero el estado está limpio
+    if (g_controller_enabled) state_controller_toggle_enable();
 
-    while (1)
-    {
+    while(1) {
         vTaskDelayUntil(&last_wake_time, pdMS_TO_TICKS(PID_LOOP_PERIOD_MS));
+        if (!g_controller_enabled) continue;
 
-        if (!g_pid_enabled)
-        {
-            g_last_error = 0; // Mientras está deshabilitado, el error anterior es cero
-            g_integral = 0.0; // Reseteamos el término integral al deshabilitar
-            continue;
-        }
+        // --- 1. ESTIMACIÓN DE ESTADO ---
+        // Ángulo (theta)
+        int16_t angle_counts = pulse_counter_get_value();
+        float theta_rad = (float)angle_counts * (2.0f * 3.14159f / 4096.0f);
 
-        // 1. MEDIR: Leer la posición actual del péndulo
-        int16_t current_position = pulse_counter_get_value();
+        // Velocidad Angular (theta_dot)
+        float theta_dot_rad_s = (theta_rad - last_theta_rad) / LOOP_PERIOD_S;
+        last_theta_rad = theta_rad;
 
-        // 2. CALCULAR ERROR: La diferencia entre donde queremos estar (0) y donde estamos
-        float error = g_setpoint - current_position;
+        // Posición del Carro (x)
+        // Necesitas tu constante de pulsos por metro (136400 pulsos / 0.59m)
+        const float PULSES_PER_METER = 136400.0f / 0.59f;
+        float x_m = (float)g_car_position_pulses / PULSES_PER_METER;
+        
+        // Velocidad del Carro (x_dot)
+        // x_dot es la velocidad que *comandamos* en el ciclo anterior. Es una buena estimación.
+        float x_dot_m_s = current_velocity_m_s;
 
-        // 3. APLICAR BANDA MUERTA
-        if (fabs(error) < DEAD_BAND_PULSES)
-        {
-            error = 0;
-        }
+        // --- 2. CÁLCULO DE LA LEY DE CONTROL ---
+        float error_x = x_m - setpoint_x_m;
+        float error_theta = theta_rad - setpoint_theta_rad;
 
-        // Acumulamos el error en el término integral.
-        // Se multiplica por (PID_LOOP_PERIOD_MS / 1000.0f) para que sea independiente de la frecuencia del bucle.
-        g_integral += error * PID_LOOP_PERIOD_MS;
+        float U = -(K1 * error_x + K2 * x_dot_m_s + K3 * error_theta + K4 * theta_dot_rad_s);
 
-        // Anti-Windup: Limitamos el término integral para que no crezca demasiado.
-        if (g_integral > MAX_INTEGRAL)
-            g_integral = MAX_INTEGRAL;
-        if (g_integral < -MAX_INTEGRAL)
-            g_integral = -MAX_INTEGRAL;
+        // Saturar la fuerza de control
+        if (U > MAX_CONTROL_FORCE) U = MAX_CONTROL_FORCE;
+        if (U < -MAX_CONTROL_FORCE) U = -MAX_CONTROL_FORCE;
 
-        // Si el error es cero, reseteamos el integral para evitar que siga actuando innecesariamente.
-        if (error == 0)
-            g_integral = 0;
+        // --- 3. CONVERTIR FUERZA A COMANDO DE MOTOR ---
+        float target_acceleration = U * FORCE_TO_ACCEL_SCALE;
+        float target_velocity = x_dot_m_s + (target_acceleration * LOOP_PERIOD_S);
+        current_velocity_m_s = target_velocity; // Guardar para el próximo ciclo
 
-        float i_term = g_ki * g_integral;
+        int target_frequency = (int)fabs(target_velocity * VELOCITY_TO_FREQ_SCALE);
+        int direction = (target_velocity >= 0) ? 1 : 0;
+        
+        // El número de pulsos se calcula para un movimiento continuo
+        int num_pulses = (uint32_t)(target_frequency * PID_LOOP_PERIOD_MS) / 1000;
+        if (num_pulses == 0 && target_frequency > 10) num_pulses = 1;
 
-        // 4. CALCULAR SALIDA DEL CONTROLADOR
-        float p_term = g_kp * error;
-
-        // --- Término Derivativo (D) ---
-        // Calcula la "velocidad" del error (cuánto cambió desde el último ciclo)
-        float derivative = (error - g_last_error) / PID_LOOP_PERIOD_MS;
-        float d_term = g_kd * derivative;
-
-        // Sumamos los términos para obtener la salida final
-        float output = p_term + d_term + i_term;
-
-        // 5. SATURAR LA SALIDA
-        //if (output > MAX_OUTPUT_PULSES) output = MAX_OUTPUT_PULSES;
-        //if (output < -MAX_OUTPUT_PULSES) output = -MAX_OUTPUT_PULSES;
-
-        // --- AÑADIDO: Filtro de Salida (Paso Bajo Simple) ---
-        // La nueva salida es un 70% de la salida anterior más un 30% de la nueva calculada.
-        // Esto "amortigua" los cambios bruscos. El 0.3 es el "factor de suavizado".
-        g_smoothed_output = (0.7f * g_smoothed_output) + (0.3f * output);
-
-        // 5. SATURAR LA SALIDA (ahora sobre la salida suavizada)
-        if (g_smoothed_output > MAX_OUTPUT_PULSES) g_smoothed_output = MAX_OUTPUT_PULSES;
-        if (g_smoothed_output < -MAX_OUTPUT_PULSES) g_smoothed_output = -MAX_OUTPUT_PULSES;
-
-        // 6. ACTUAR: Si la salida no es cero, enviar comando al motor
-        /*if (fabs(output) > 0.1) {
-            motor_command_t cmd;
-            cmd.num_pulses = (int)fabs(output);
-
-            // Si output es positivo, el péndulo cayó a la izquierda (posición negativa, error positivo).
-            // Necesitamos movernos a la izquierda para corregir. Asumimos dir=0 es izquierda.
-            // Si output es negativo, el péndulo cayó a la derecha (posición positiva, error negativo).
-            // Necesitamos movernos a la derecha. Asumimos dir=1 es derecha.
-            // NOTA: Si el motor se mueve en sentido contrario, invierte la lógica aquí (0 : 1)
-            cmd.direction = (output > 0) ? 1 : 0;
-
-            cmd.frequency = BASE_FREQUENCY + (int)(fabs(output) * FREQ_PER_ERROR_PULSE);
-
-            // --- CAMBIO CLAVE: Enviar comando a la cola ---
-            // Usamos xQueueOverwrite para asegurarnos de que el comando más reciente
-            // siempre esté disponible para la tarea del motor. Si el motor está
-            // ejecutando un comando antiguo, este lo sobrescribirá.
-            xQueueOverwrite(motor_command_queue, &cmd);
-        }
-        else
-        {
-            // Si la salida es cero (dentro de la banda muerta o saturada a cero),
-            // podríamos enviar un comando para detener el motor si es necesario.
-            // Por ejemplo, un comando con 0 pulsos.
-            motor_command_t stop_cmd = {.num_pulses = 0, .frequency = 0, .direction = 0};
-            xQueueOverwrite(motor_command_queue, &stop_cmd);
-        }*/
-
-        if (fabs(g_smoothed_output) > 0.1) {
-            int num_pulses = (int)fabs(g_smoothed_output);
-            int direction = (g_smoothed_output > 0) ? 1 : 0; 
-            int frequency = BASE_FREQUENCY + (int)(fabs(g_smoothed_output) * FREQ_PER_ERROR_PULSE);
-
-            // --- OPTIMIZACIÓN DE CONTINUIDAD (SOLUCIÓN 1) ---
-
-            // 1. Calcular la duración teórica del movimiento
-            uint32_t duration_ms = (uint32_t)(num_pulses * 1000) / frequency;
-            
-            // 2. Solo actuar si el movimiento es significativo (dura al menos 1ms)
-            if (duration_ms > 0) {
-                
-                // 3. Asegurar que el movimiento dure al menos un ciclo de PID
-                // Si la duración calculada es más corta que nuestro ciclo de control...
-                if (duration_ms < PID_LOOP_PERIOD_MS) {
-                    // ... recalculamos el número de pulsos para que el movimiento 
-                    // llene exactamente un ciclo de control. Esto crea la continuidad.
-                    num_pulses = (uint32_t)(frequency * PID_LOOP_PERIOD_MS) / 1000;
-                }
-
-                // 4. Enviar el comando (posiblemente ajustado) a la cola del motor
-                motor_command_t cmd = {
-                    .num_pulses = num_pulses,
-                    .frequency = frequency,
-                    .direction = direction
-                };
-                xQueueOverwrite(motor_command_queue, &cmd);
-            }
-            // Si la duración era 0, simplemente no hacemos nada en este ciclo.
-
-        } else {
-            // Si la salida del PID es cero, enviamos un comando de parada explícito.
-            motor_command_t stop_cmd = { .num_pulses = 0, .frequency = 1000, .direction = 0 };
-            xQueueOverwrite(motor_command_queue, &stop_cmd);
-        }
-
-        g_last_error = error; // Guardamos para el futuro término Derivativo
+        // Enviar comando a la cola
+        motor_command_t cmd = { num_pulses, target_frequency, direction };
+        xQueueOverwrite(motor_command_queue, &cmd);
     }
 }
-

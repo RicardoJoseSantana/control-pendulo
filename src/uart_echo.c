@@ -10,7 +10,7 @@ static const char *TAG = "UART_ECHO";
 // Definimos la cola de comandos
 // QueueHandle_t pwm_command_queue;
 
-void uart_echo_task(void *arg) {
+/*void uart_echo_task(void *arg) {
 
     uart_config_t uart_config = {
         .baud_rate = 115200,
@@ -63,4 +63,4 @@ void uart_echo_task(void *arg) {
             }
         }
     }
-}
+}*/

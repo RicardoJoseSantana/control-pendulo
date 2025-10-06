@@ -20,14 +20,6 @@
 #define EMERGENCY_STOP_GPIO_LEFT GPIO_NUM_34      // Botón de parada de emergencia izquierdo
 #define EMERGENCY_STOP_GPIO_RIGHT GPIO_NUM_35      // Botón de parada de emergencia derecho
 
-// --- PARÁMETROS DE MOVIMIENTO MANUAL ---
-/*#define MANUAL_MOVE_SPEED_HZ 20000 // Velocidad constante para el movimiento manual (alta)
-#define MANUAL_MOVE_PULSES   400   // Cantidad de pulsos por ciclo (movimiento suave)
-
-// --- PARÁMETROS DE MOVIMIENTO secuencia ---
-#define SEQUENCE_BASE_PULSES 16000
-#define SEQUENCE_BASE_SPEED_HZ 5000*/
-
 // --- PARÁMETROS DE MOVIMIENTO ---
 #define JOG_SPEED_HZ          20000 // Velocidad para el movimiento manual (jog)
 #define JOG_PULSES            400   // Pulsos por ciclo de jog
@@ -38,7 +30,7 @@ static const char *TAG = "BUTTON_HANDLER";
 // extern bool g_pid_enabled;
 
 // --- Contador de posición del carro en micropasos ---
-static int32_t g_car_position_pulses = 0;
+// static int32_t g_car_position_pulses = 0;
 
 // Función auxiliar para botones de comando (pulsar y soltar)
 static bool is_command_button_pressed(int gpio_num) {
@@ -82,7 +74,14 @@ void button_handler_task(void *arg)
 
     while (1)
     {
-        // --- AÑADIDO: Lógica para el botón de cambio de vista ---
+        // --- Lógica para Habilitar/Deshabilitar el control LQR ---
+        // Detectar pulsación en ENABLE_PID_BUTTON_GPIO
+        if (is_command_button_pressed(ENABLE_PID_BUTTON_GPIO)) { // Usando una función auxiliar
+            // --- CAMBIO ---
+            state_controller_toggle_enable();
+        }
+
+        // --- Lógica para el botón de cambio de vista ---
         int current_view_button_state = gpio_get_level(VIEW_CYCLE_BUTTON_GPIO);
         if (last_view_button_state == 1 && current_view_button_state == 0)
         {
@@ -100,7 +99,7 @@ void button_handler_task(void *arg)
             
             if (gpio_get_level(EMERGENCY_STOP_GPIO_RIGHT) == 0) {
                 // Llama a la función que solo deshabilita
-                pid_force_disable();
+                state_controller_force_disable();
             }
             vTaskDelay(pdMS_TO_TICKS(50)); // Debounce
         }
@@ -111,7 +110,7 @@ void button_handler_task(void *arg)
             
             if (gpio_get_level(EMERGENCY_STOP_GPIO_LEFT) == 0) {
                 // Llama a la función que solo deshabilita
-                pid_force_disable();
+                state_controller_force_disable();
             }
             vTaskDelay(pdMS_TO_TICKS(50)); // Debounce
         }
@@ -127,13 +126,13 @@ void button_handler_task(void *arg)
             if (gpio_get_level(ENABLE_PID_BUTTON_GPIO) == 0)
             {
 
-                pid_toggle_enable();
+                state_controller_toggle_enable();
             }
         }
         last_button_state = current_button_state;
 
         // Solo permitimos el movimiento manual si el PID está explícitamente deshabilitado
-        if (!pid_is_enabled())
+        if (!state_controller_is_enabled())
         {
 
             
@@ -183,7 +182,7 @@ void button_handler_task(void *arg)
                 int32_t pulses_to_center = abs(center_pos - g_car_position_pulses);
                 int direction_to_center = (center_pos > g_car_position_pulses) ? 1 : 0;
                 execute_movement(pulses_to_center, JOG_SPEED_HZ, direction_to_center);
-                g_car_position_pulses = center_pos;
+                g_car_position_pulses = 0; //resetea a 0 los pulsos del carro
                 
                 ESP_LOGW(TAG, "--- CALIBRACIÓN FINALIZADA. Posición: %ld ---", g_car_position_pulses);
                 ESP_LOGI(TAG, "Esperando 2 segundos para estabilizar...");
@@ -194,19 +193,21 @@ void button_handler_task(void *arg)
                 ESP_LOGI(TAG, "Calculando setpoint vertical...");
                 
                 // 1. Leer la posición del encoder con el péndulo caído y centrado.
-                int16_t fallen_pos = pulse_counter_get_value();
-                ESP_LOGI(TAG, "Posición 'caída' detectada: %d", fallen_pos);
+                int16_t fallen_pos_counts = pulse_counter_get_value();
+                ESP_LOGI(TAG, "Posición 'caída' detectada: %d cuentas", fallen_pos_counts);
 
-                // 2. Calcular la posición vertical (180 grados de diferencia).
-                // Usamos el operador de módulo para manejar el "wrap-around" del contador de 16 bits.
-                int32_t vertical_setpoint_32 = fallen_pos + (ENCODER_RESOLUTION / 2);
-                int16_t vertical_setpoint_16 = (int16_t)vertical_setpoint_32; // Casting para el rango correcto
+                // La posición vertical está a 180 grados (media vuelta del encoder)
+                int32_t vertical_pos_counts_32 = fallen_pos_counts + (ENCODER_RESOLUTION / 2);
+                int16_t vertical_pos_counts_16 = (int16_t)vertical_pos_counts_32;
                 
-                // 3. Llamar a la función del PID para establecer el setpoint calculado.
-                pid_set_absolute_setpoint(vertical_setpoint_16);
+                // El controlador de estado trabaja en radianes, así que convertimos.
+                float vertical_setpoint_rad = (float)vertical_pos_counts_16 * (2.0f * 3.14159f / (float)ENCODER_RESOLUTION);
                 
-                ESP_LOGW(TAG, "Setpoint vertical pre-calculado: %d. El sistema está listo.", vertical_setpoint_16);
-                ESP_LOGW(TAG, "Levante el péndulo y presione el botón de habilitar PID.");
+                // Se llama a la función que espera un valor en radianes.
+                state_controller_set_theta_setpoint(vertical_setpoint_rad);
+                
+                ESP_LOGW(TAG, "Setpoint de ángulo pre-calculado. El sistema está listo.");
+                ESP_LOGW(TAG, "Levante el péndulo y presione el botón de habilitar.");
             }
 
 

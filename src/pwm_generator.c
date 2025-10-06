@@ -1,15 +1,10 @@
-#include"pid_controller.h"
+#include "pid_controller.h"
 #include "pwm_generator.h"
 #include "driver/gpio.h" // Necesario para controlar el pin de dirección
 #include "nvs_flash.h" // Cabeceras para NVS
 #include "nvs.h"
 
 static const char *TAG = "PWM_GENERATOR";
-
-// --- Definiciones para NVS ---
-#define NVS_STORAGE_NAMESPACE "storage" // Un "espacio de nombres" para organizar los datos
-#define NVS_COMMAND_KEY "last_cmd"      // La "llave" bajo la cual guardaremos nuestro comando
-
 
 // Configuración del LEDC (PWM)
 void pwm_init(void) {
@@ -111,6 +106,14 @@ void motor_control_task(void *arg)
         // xQueueReceive devuelve pdTRUE si un ítem fue copiado a received_cmd.
         if (xQueueReceive(motor_command_queue, &received_cmd, portMAX_DELAY) == pdTRUE)
         {
+
+            // Antes de ejecutar el movimiento, calculamos cómo cambiará la posición
+            if (received_cmd.direction == 1) { // Asumimos que 1 es derecha (positivo)
+                g_car_position_pulses += received_cmd.num_pulses;
+            } else { // Dirección 0 es izquierda (negativo)
+                g_car_position_pulses -= received_cmd.num_pulses;
+            }
+
             // Si num_pulses es 0, significa una instrucción para detener el motor
             if (received_cmd.num_pulses == 0)
             {
@@ -152,20 +155,6 @@ void motor_control_task(void *arg)
             gpio_set_level(LEDC_DIRECTION_IO, 0); // Resetear dirección después del movimiento
 
             // ESP_LOGI(TAG, "Movimiento finalizado.");
-        }
-    }
-}
-
-// Su único trabajo es esperar comandos y ejecutarlos.
-void pwm_generator_task(void *arg) {
-    pwm_command_t received_command;
-    while (1) {
-        // La tarea se queda aquí "dormida" hasta que llega un comando.
-        // Esto consume 0% de CPU mientras espera.
-        if (xQueueReceive(pwm_command_queue, &received_command, portMAX_DELAY) == pdPASS) {
-            // Cuando un comando llega (enviado por el PID), se ejecuta el movimiento.
-            // La tarea del PID ya está libre para su siguiente ciclo de cálculo.
-            execute_movement(received_command.num_pulses, received_command.frequency, received_command.direction);
         }
     }
 }

@@ -190,7 +190,7 @@ void lcd_display_task(void *pvParameters)
         {
         case VIEW_MAIN_STATUS:
         {
-            bool is_pid_on = pid_is_enabled();
+            bool is_pid_on = state_controller_is_enabled();
             manual_move_state_t move_state = status_get_manual_move_state();
 
             // Línea 1: Estado prioritario
@@ -204,7 +204,7 @@ void lcd_display_task(void *pvParameters)
             }
             else
             {
-                lcd_printf_line(0, "PID: %s", is_pid_on ? "ACTIVO" : "INACTIVO");
+                lcd_printf_line(0, "estado: %s", is_pid_on ? "ACTIVO" : "INACTIVO");
             }
 
             // Línea 2: Posición en grados
@@ -222,7 +222,7 @@ void lcd_display_task(void *pvParameters)
             break;
         }
 
-        case VIEW_PID_GAINS:
+        /*case VIEW_PID_GAINS:
         {
             // Obtenemos los valores actuales del módulo PID
             float kp = pid_get_kp();
@@ -232,7 +232,7 @@ void lcd_display_task(void *pvParameters)
             float kd = pid_get_kd();
             lcd_printf_line(1, "Kd: %.2f", kd);
             break;
-        }
+        }*/
 
         default:
             // Vista por defecto en caso de error

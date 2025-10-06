@@ -47,16 +47,13 @@ void app_main(void)
   // --------- Cada tarea se ejecutará de forma independiente y concurrente. ---------
 
   // Crear la tarea del controlador PID (prioridad mas alta)
-  xTaskCreate(pid_controller_task, "PID_Controller", configMINIMAL_STACK_SIZE * 4, NULL, 5, NULL);
+  xTaskCreate(state_controller_task, "PID_Controller", configMINIMAL_STACK_SIZE * 4, NULL, 5, NULL);
   
   // Crear la tarea del control del motor
   xTaskCreate(motor_control_task, "Motor_Control", configMINIMAL_STACK_SIZE * 3, NULL, 4, NULL);
 
   // Tarea para manejar los comandos recibidos por el puerto serie
-  xTaskCreate(uart_echo_task, "uart_echo_task", configMINIMAL_STACK_SIZE * 3, NULL, 3, NULL);
-
-  // Tarea que inicializa el PCNT y reporta la posición del encoder para depuración
-  // xTaskCreate(pulse_counter_task, "pulse_counter_task", configMINIMAL_STACK_SIZE * 3, NULL, 5, NULL);
+  // xTaskCreate(uart_echo_task, "uart_echo_task", configMINIMAL_STACK_SIZE * 3, NULL, 3, NULL);
 
   // Tarea que monitorea el botón BOOT y envía comandos de "repetir"
   xTaskCreate(button_handler_task, "button_handler_task", configMINIMAL_STACK_SIZE * 3, NULL, 4, NULL);
