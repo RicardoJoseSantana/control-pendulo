@@ -15,4 +15,9 @@ void pos_pid_set_kp(float kp);
 void pos_pid_set_ki(float ki);
 void pos_pid_set_kd(float kd);
 
+// --- AÑADIDO: Funciones para obtener los valores de las ganancias ---
+float pos_pid_get_kp(void);
+float pos_pid_get_ki(void);
+float pos_pid_get_kd(void);
+
 #endif // POSITION_CONTROLLER_H

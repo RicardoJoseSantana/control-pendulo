@@ -11,6 +11,7 @@
 #include "system_status.h"
 #include "driver/gpio.h"
 #include "esp_rom_sys.h"
+#include "position_controller.h"
 
 // --- CONFIGURACIÓN PRIVADA DEL MÓDULO (Pines sin cambios) ---
 #define LCD_RS_PIN GPIO_NUM_19
@@ -216,9 +217,13 @@ void lcd_display_task(void *pvParameters)
 
         case VIEW_ENCODER_COUNTS:
         {
-            lcd_printf_line(0, "Encoder Crudo");
-            int16_t position = pulse_counter_get_value();
-            lcd_printf_line(1, "Pulsos: %d", position);
+             // Obtenemos los valores actuales del módulo PID
+            float kp = pos_pid_get_kp();
+            float ki = pos_pid_get_ki();
+            // Mostramos Kp y Ki en la misma línea
+            lcd_printf_line(0, "KpX:%.2f KiX:%.2f", kp, ki);
+            float kd = pos_pid_get_kd();
+            lcd_printf_line(1, "KdX: %.2f", kd);
             break;
         }
 
