@@ -50,6 +50,14 @@
 // Frecuencia = BASE_FREQUENCY + (Error * FREQ_PER_ERROR_PULSE)
 #define FREQ_PER_ERROR_PULSE 80.0f
 
+// Ganancia Proporcional para la posición del carro. Convierte el error de posición
+// en un pequeño ángulo de inclinación deseado (en cuentas del encoder).
+// Este es tu nuevo "dial" para controlar qué tan rápido vuelve el carro al centro.
+#define POSITION_CONTROL_GAIN 0.05f
+
+// Límite máximo para el offset del setpoint. Evita que pida ángulos demasiado grandes.
+#define MAX_SETPOINT_OFFSET 50 // Máximo offset de 50 cuentas
+
 /************************************************************************************
  *                        FIN DE LA CONFIGURACIÓN DE PARÁMETROS                     *
  ************************************************************************************/
@@ -66,8 +74,11 @@ static float g_kp = 41.0;  // Ganancia Proporcional: El "presente". Reacciona al
 static float g_ki = 0.4;  // Ganancia Integral: El "pasado". Corrige errores acumulados.
 static float g_kd = 70.0;  // Ganancia Derivativa: El "futuro". Predice y amortigua.
 
-// --- AÑADIDO: 'g_setpoint' es ahora una variable que podemos cambiar ---
-static volatile int16_t g_setpoint = 0; // Se inicializa en 0 por defecto
+// --- Variable para el angulo del pendulo ---
+static volatile int16_t g_absolute_setpoint = 0; // Se inicializa en 0 por defecto
+
+// --- Variable para la posición del carro ---
+volatile int32_t g_car_position_pulses = 0; //pwm_generator puede actualizarla.
 
 static float g_integral = 0.0;
 static float g_last_error = 0.0;
@@ -81,8 +92,8 @@ float pid_get_kd(void) { return g_kd; }
 
 // --- establecer el setpoint externamente ---
 void pid_set_absolute_setpoint(int16_t new_setpoint) {
-    g_setpoint = new_setpoint;
-    ESP_LOGW(TAG, "Setpoint absoluto establecido en: %d", g_setpoint);
+    g_absolute_setpoint = new_setpoint;
+    ESP_LOGW(TAG, "Setpoint absoluto establecido en: %d", g_absolute_setpoint);
 }
 
 void pid_toggle_enable(void)
@@ -94,7 +105,7 @@ void pid_toggle_enable(void)
         // 1. Leer la posición actual del encoder en el momento de la habilitación.
         //int16_t current_position = pulse_counter_get_value();
         // 2. Establecer esa posición como nuestro nuevo punto de equilibrio.
-        //g_setpoint = current_position;
+        //g_absolute_setpoint = current_position;
 
         g_integral = 0.0;
         g_last_error = 0.0;
@@ -125,7 +136,7 @@ void pid_set_kd(float kd)
 // --- AÑADIDO: Implementación de la nueva función 'getter' ---
 int16_t pid_get_setpoint(void)
 {
-    return g_setpoint;
+    return g_absolute_setpoint;
 }
 
 // --- AÑADIDO: Implementación de la función de deshabilitación forzada ---
@@ -167,21 +178,32 @@ void pid_controller_task(void *arg)
             continue;
         }
 
-        // 1. MEDIR: Leer la posición actual del péndulo
-        int16_t current_position = pulse_counter_get_value();
+        // 1. MEDIR estado actual
+        int16_t current_angle = pulse_counter_get_value();
 
-        // 2. CALCULAR ERROR: La diferencia entre donde queremos estar (0) y donde estamos
-        float error = g_setpoint - current_position;
+        // --- Lógica de control de posición ---
+        // a. Calcular el error de posición del carro (queremos que sea 0)
+        float position_error = 0.0f - g_car_position_pulses;
+        // b. Convertir el error de posición en un pequeño offset para el setpoint del ángulo
+        float setpoint_offset = position_error * POSITION_CONTROL_GAIN;
+        // c. Limitar (saturar) el offset para que no pida ángulos peligrosos
+        if (setpoint_offset > MAX_SETPOINT_OFFSET) setpoint_offset = MAX_SETPOINT_OFFSET;
+        if (setpoint_offset < -MAX_SETPOINT_OFFSET) setpoint_offset = -MAX_SETPOINT_OFFSET;
+        // d. Calcular el setpoint dinámico para este ciclo
+        int16_t dynamic_setpoint = g_absolute_setpoint + (int16_t)setpoint_offset;
+
+        // 2. CALCULAR ERROR de ángulo usando el setpoint dinámico
+        float angle_error = dynamic_setpoint - current_angle;
 
         // 3. APLICAR BANDA MUERTA
-        if (fabs(error) < DEAD_BAND_PULSES)
+        if (fabs(angle_error) < DEAD_BAND_PULSES)
         {
-            error = 0;
+            angle_error = 0;
         }
 
         // Acumulamos el error en el término integral.
         // Se multiplica por (PID_LOOP_PERIOD_MS / 1000.0f) para que sea independiente de la frecuencia del bucle.
-        g_integral += error * PID_LOOP_PERIOD_MS;
+        g_integral += angle_error * PID_LOOP_PERIOD_MS;
 
         // Anti-Windup: Limitamos el término integral para que no crezca demasiado.
         if (g_integral > MAX_INTEGRAL)
@@ -190,17 +212,17 @@ void pid_controller_task(void *arg)
             g_integral = -MAX_INTEGRAL;
 
         // Si el error es cero, reseteamos el integral para evitar que siga actuando innecesariamente.
-        if (error == 0)
+        if (angle_error == 0)
             g_integral = 0;
 
         float i_term = g_ki * g_integral;
 
         // 4. CALCULAR SALIDA DEL CONTROLADOR
-        float p_term = g_kp * error;
+        float p_term = g_kp * angle_error;
 
         // --- Término Derivativo (D) ---
         // Calcula la "velocidad" del error (cuánto cambió desde el último ciclo)
-        float derivative = (error - g_last_error) / PID_LOOP_PERIOD_MS;
+        float derivative = (angle_error - g_last_error) / PID_LOOP_PERIOD_MS;
         float d_term = g_kd * derivative;
 
         // Sumamos los términos para obtener la salida final
@@ -219,35 +241,9 @@ void pid_controller_task(void *arg)
         if (g_smoothed_output > MAX_OUTPUT_PULSES) g_smoothed_output = MAX_OUTPUT_PULSES;
         if (g_smoothed_output < -MAX_OUTPUT_PULSES) g_smoothed_output = -MAX_OUTPUT_PULSES;
 
+        g_last_error = angle_error; // Guardamos para el futuro término Derivativo
+
         // 6. ACTUAR: Si la salida no es cero, enviar comando al motor
-        /*if (fabs(output) > 0.1) {
-            motor_command_t cmd;
-            cmd.num_pulses = (int)fabs(output);
-
-            // Si output es positivo, el péndulo cayó a la izquierda (posición negativa, error positivo).
-            // Necesitamos movernos a la izquierda para corregir. Asumimos dir=0 es izquierda.
-            // Si output es negativo, el péndulo cayó a la derecha (posición positiva, error negativo).
-            // Necesitamos movernos a la derecha. Asumimos dir=1 es derecha.
-            // NOTA: Si el motor se mueve en sentido contrario, invierte la lógica aquí (0 : 1)
-            cmd.direction = (output > 0) ? 1 : 0;
-
-            cmd.frequency = BASE_FREQUENCY + (int)(fabs(output) * FREQ_PER_ERROR_PULSE);
-
-            // --- CAMBIO CLAVE: Enviar comando a la cola ---
-            // Usamos xQueueOverwrite para asegurarnos de que el comando más reciente
-            // siempre esté disponible para la tarea del motor. Si el motor está
-            // ejecutando un comando antiguo, este lo sobrescribirá.
-            xQueueOverwrite(motor_command_queue, &cmd);
-        }
-        else
-        {
-            // Si la salida es cero (dentro de la banda muerta o saturada a cero),
-            // podríamos enviar un comando para detener el motor si es necesario.
-            // Por ejemplo, un comando con 0 pulsos.
-            motor_command_t stop_cmd = {.num_pulses = 0, .frequency = 0, .direction = 0};
-            xQueueOverwrite(motor_command_queue, &stop_cmd);
-        }*/
-
         if (fabs(g_smoothed_output) > 0.1) {
             int num_pulses = (int)fabs(g_smoothed_output);
             int direction = (g_smoothed_output > 0) ? 1 : 0; 
@@ -285,7 +281,6 @@ void pid_controller_task(void *arg)
             xQueueOverwrite(motor_command_queue, &stop_cmd);
         }
 
-        g_last_error = error; // Guardamos para el futuro término Derivativo
     }
 }
 

@@ -38,7 +38,7 @@ static const char *TAG = "BUTTON_HANDLER";
 // extern bool g_pid_enabled;
 
 // --- Contador de posición del carro en micropasos ---
-static int32_t g_car_position_pulses = 0;
+// static int32_t g_car_position_pulses = 0;
 
 // Función auxiliar para botones de comando (pulsar y soltar)
 static bool is_command_button_pressed(int gpio_num) {
@@ -183,7 +183,7 @@ void button_handler_task(void *arg)
                 int32_t pulses_to_center = abs(center_pos - g_car_position_pulses);
                 int direction_to_center = (center_pos > g_car_position_pulses) ? 1 : 0;
                 execute_movement(pulses_to_center, JOG_SPEED_HZ, direction_to_center);
-                g_car_position_pulses = center_pos;
+                g_car_position_pulses = 0; //resetear el contador de posicion del carro
                 
                 ESP_LOGW(TAG, "--- CALIBRACIÓN FINALIZADA. Posición: %ld ---", g_car_position_pulses);
                 ESP_LOGI(TAG, "Esperando 2 segundos para estabilizar...");
