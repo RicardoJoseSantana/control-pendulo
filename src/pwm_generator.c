@@ -1,4 +1,4 @@
-#include"pid_controller.h"
+#include "pid_controller.h"
 #include "pwm_generator.h"
 #include "driver/gpio.h" // Necesario para controlar el pin de dirección
 #include "nvs_flash.h" // Cabeceras para NVS
@@ -6,10 +6,7 @@
 
 static const char *TAG = "PWM_GENERATOR";
 
-// --- Definiciones para NVS ---
-#define NVS_STORAGE_NAMESPACE "storage" // Un "espacio de nombres" para organizar los datos
-#define NVS_COMMAND_KEY "last_cmd"      // La "llave" bajo la cual guardaremos nuestro comando
-
+#define PID_LOOP_PERIOD_MS 10 //debe ser igual a la de pid_controller
 
 // Configuración del LEDC (PWM)
 void pwm_init(void) {
@@ -111,6 +108,16 @@ void motor_control_task(void *arg)
         // xQueueReceive devuelve pdTRUE si un ítem fue copiado a received_cmd.
         if (xQueueReceive(motor_command_queue, &received_cmd, portMAX_DELAY) == pdTRUE)
         {
+
+            // --- Actualización de la odometría del carro ---
+            // Calculamos los pulsos que se ejecutarán en este ciclo
+            int pulses_this_cycle = (int)(received_cmd.frequency * (float)PID_LOOP_PERIOD_MS / 1000.0f);
+            if (received_cmd.direction == 1) { // Derecha (positivo)
+                g_car_position_pulses += pulses_this_cycle;
+            } else { // Izquierda (negativo)
+                g_car_position_pulses -= pulses_this_cycle;
+            }
+
             // Si num_pulses es 0, significa una instrucción para detener el motor
             if (received_cmd.num_pulses == 0)
             {

@@ -14,6 +14,7 @@
 #include "freertos/queue.h"
 #include "lcd_controller.h" // ¡Solo incluimos nuestro módulo!
 #include "system_status.h"
+#include "position_controller.h"
 
 /*typedef struct
 {
@@ -55,8 +56,8 @@ void app_main(void)
   // Tarea para manejar los comandos recibidos por el puerto serie
   xTaskCreate(uart_echo_task, "uart_echo_task", configMINIMAL_STACK_SIZE * 3, NULL, 3, NULL);
 
-  // Tarea que inicializa el PCNT y reporta la posición del encoder para depuración
-  // xTaskCreate(pulse_counter_task, "pulse_counter_task", configMINIMAL_STACK_SIZE * 3, NULL, 5, NULL);
+  // --- AÑADIDO: Tarea del PID de Posición (baja prioridad) ---
+  xTaskCreate(position_controller_task, "Position_Ctrl", configMINIMAL_STACK_SIZE * 3, NULL, 3, NULL);
 
   // Tarea que monitorea el botón BOOT y envía comandos de "repetir"
   xTaskCreate(button_handler_task, "button_handler_task", configMINIMAL_STACK_SIZE * 3, NULL, 4, NULL);

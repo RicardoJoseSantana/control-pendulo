@@ -4,6 +4,7 @@
 #include "uart_echo.h"
 #include "freertos/queue.h" // Necesario para crear la cola
 #include "pid_controller.h"
+#include "position_controller.h"
 
 static const char *TAG = "UART_ECHO";
 
@@ -55,6 +56,12 @@ void uart_echo_task(void *arg) {
                     pid_set_ki(value);
                 } else if (strcmp(cmd, "SETKD") == 0) {
                     pid_set_kd(value);
+                } else if (strcmp(cmd, "SETKPX") == 0) {
+                    pos_pid_set_kp(value);
+                } else if (strcmp(cmd, "SETKIX") == 0) {
+                    pos_pid_set_ki(value);
+                } else if (strcmp(cmd, "SETKDX") == 0) {
+                    pos_pid_set_kd(value);
                 } else {
                     uart_write_bytes(UART_PORT, "Comando desconocido.\r\n", strlen("Comando desconocido.\r\n"));
                 }

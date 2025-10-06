@@ -9,6 +9,7 @@
 #include "pulse_counter.h" // Para leer la posición del encoder
 #include "pwm_generator.h" // Para la función que mueve el motor
 #include "uart_echo.h"
+#include "position_controller.h"
 
 /************************************************************************************
  *                                                                                  *
@@ -68,6 +69,9 @@ static float g_kd = 70.0;  // Ganancia Derivativa: El "futuro". Predice y amorti
 
 // --- AÑADIDO: 'g_setpoint' es ahora una variable que podemos cambiar ---
 static volatile int16_t g_setpoint = 0; // Se inicializa en 0 por defecto
+
+// --- AÑADIDO: Definición de la odometría del carro ---
+volatile int32_t g_car_position_pulses = 0;
 
 static float g_integral = 0.0;
 static float g_last_error = 0.0;
@@ -219,36 +223,50 @@ void pid_controller_task(void *arg)
         if (g_smoothed_output > MAX_OUTPUT_PULSES) g_smoothed_output = MAX_OUTPUT_PULSES;
         if (g_smoothed_output < -MAX_OUTPUT_PULSES) g_smoothed_output = -MAX_OUTPUT_PULSES;
 
-        // 6. ACTUAR: Si la salida no es cero, enviar comando al motor
-        /*if (fabs(output) > 0.1) {
-            motor_command_t cmd;
-            cmd.num_pulses = (int)fabs(output);
+        // 6. ACTUAR (Mezcla de señales y conversión a comando de motor)
+        // Primero, convertimos la salida del PID de ángulo a una "velocidad base"
+        float balance_velocity_hz = g_smoothed_output * FREQ_PER_ERROR_PULSE;
 
-            // Si output es positivo, el péndulo cayó a la izquierda (posición negativa, error positivo).
-            // Necesitamos movernos a la izquierda para corregir. Asumimos dir=0 es izquierda.
-            // Si output es negativo, el péndulo cayó a la derecha (posición positiva, error negativo).
-            // Necesitamos movernos a la derecha. Asumimos dir=1 es derecha.
-            // NOTA: Si el motor se mueve en sentido contrario, invierte la lógica aquí (0 : 1)
-            cmd.direction = (output > 0) ? 1 : 0;
+        // --- MEZCLA DE VELOCIDADES (Aquí ocurre la cascada) ---
+        // Sumamos la velocidad necesaria para el equilibrio con la velocidad
+        // suave necesaria para corregir la posición del carro.
+        // ASUNCIÓN DE SIGNOS:
+        // - balance_velocity_hz positivo -> mover a la DERECHA para corregir caída
+        // - g_position_correction_velocity positivo -> mover a la DERECHA para centrar
+        float total_velocity_hz = balance_velocity_hz + g_position_correction_velocity;
 
-            cmd.frequency = BASE_FREQUENCY + (int)(fabs(output) * FREQ_PER_ERROR_PULSE);
+        // Ahora procesamos esta velocidad total para generar el comando
+        if (fabs(total_velocity_hz) > (BASE_FREQUENCY * 0.1)) { // Banda muerta de velocidad
+            
+            // Determinar la dirección final basada en el signo de la suma
+            int direction = (total_velocity_hz > 0) ? 1 : 0; 
+            
+            // La frecuencia final es la magnitud de la suma, más la frecuencia base
+            int frequency = BASE_FREQUENCY + (int)fabs(total_velocity_hz);
 
-            // --- CAMBIO CLAVE: Enviar comando a la cola ---
-            // Usamos xQueueOverwrite para asegurarnos de que el comando más reciente
-            // siempre esté disponible para la tarea del motor. Si el motor está
-            // ejecutando un comando antiguo, este lo sobrescribirá.
+            // --- OPTIMIZACIÓN DE CONTINUIDAD (IGUAL QUE ANTES) ---
+            // Calculamos los pulsos necesarios para mantener esta velocidad
+            // durante exactamente un ciclo de PID (10ms).
+            int num_pulses = (uint32_t)(frequency * PID_LOOP_PERIOD_MS) / 1000;
+            
+            // Asegurar al menos 1 pulso si hay velocidad
+            if (num_pulses == 0 && frequency > 0) num_pulses = 1;
+
+            // Enviar el comando
+            motor_command_t cmd = {
+                .num_pulses = num_pulses,
+                .frequency = frequency,
+                .direction = direction
+            };
             xQueueOverwrite(motor_command_queue, &cmd);
-        }
-        else
-        {
-            // Si la salida es cero (dentro de la banda muerta o saturada a cero),
-            // podríamos enviar un comando para detener el motor si es necesario.
-            // Por ejemplo, un comando con 0 pulsos.
-            motor_command_t stop_cmd = {.num_pulses = 0, .frequency = 0, .direction = 0};
-            xQueueOverwrite(motor_command_queue, &stop_cmd);
-        }*/
 
-        if (fabs(g_smoothed_output) > 0.1) {
+        } else {
+            // Si la velocidad total requerida es muy baja, paramos.
+            motor_command_t stop_cmd = { .num_pulses = 0, .frequency = 1000, .direction = 0 };
+            xQueueOverwrite(motor_command_queue, &stop_cmd);
+        }
+
+        /*if (fabs(g_smoothed_output) > 0.1) {
             int num_pulses = (int)fabs(g_smoothed_output);
             int direction = (g_smoothed_output > 0) ? 1 : 0; 
             int frequency = BASE_FREQUENCY + (int)(fabs(g_smoothed_output) * FREQ_PER_ERROR_PULSE);
@@ -283,7 +301,7 @@ void pid_controller_task(void *arg)
             // Si la salida del PID es cero, enviamos un comando de parada explícito.
             motor_command_t stop_cmd = { .num_pulses = 0, .frequency = 1000, .direction = 0 };
             xQueueOverwrite(motor_command_queue, &stop_cmd);
-        }
+        }*/
 
         g_last_error = error; // Guardamos para el futuro término Derivativo
     }
