@@ -3,9 +3,9 @@ import control as ct
 
 # --- 1. PARÁMETROS DE TU SISTEMA (Ejemplo, reemplaza con los tuyos) ---
 M = 0.320   # kg (masa del carro)
-m = 0.020   # kg (masa del péndulo)
-l = 0.13   # metros (longitud al centro de masa del péndulo)
-g = 9.81  # m/s^2
+m = 0.030   # kg (masa del péndulo)
+l = 0.26   # metros (longitud al centro de masa del péndulo)
+g = 9.8  # m/s^2
 I = (1/3)*m*(l**2) # kg*m^2 (momento de inercia, ej. (1/12)*m*(2*l)^2)
 
 # --- 2. CONSTRUIR EL MODELO EN ESPACIO DE ESTADOS (A, B) ---
@@ -37,7 +37,7 @@ sys = ct.StateSpace(A, B, C, D)
 # Q penaliza los errores de estado. R penaliza el esfuerzo de control.
 
 # [Error de x, Error de x_dot, Error de theta, Error de theta_dot]
-Q = np.diag([1.0, 1.0, 100.0, 1.0]) # Penalizamos MUCHO el error de ángulo (theta)
+Q = np.diag([10.0, 1.0, 100.0, 1.0]) # Penalizamos MUCHO el error de ángulo (theta)
 
 R = np.array([[0.1]]) # Penalización del esfuerzo de control (fuerza U)
 

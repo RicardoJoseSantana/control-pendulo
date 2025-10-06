@@ -13,21 +13,23 @@ este modelo no se basa en un PID sino en ecuaciones de estado*/
 #include "pwm_generator.h" // Para la función que mueve el motor
 #include "uart_echo.h"
 
-static const char *TAG = "STATE_EC";
+//static const char *TAG = "STATE_EC";
 
 // --- PARÁMETROS FÍSICOS (reemplaza con los tuyos) ---
-#define M_CART 0.5f  // kg
-#define M_POLE 0.2f  // kg
-#define POLE_LENGTH_M 0.3f // metros (l)
+#define M_CART 0.32f  // kg
+#define M_POLE 0.03f  // kg
+#define POLE_LENGTH_M 0.26f // metros (l)
 #define PID_LOOP_PERIOD_MS 20
 
 // --- GANANCIAS LQR (copia aquí los resultados de tu script de Python) ---
-static const float K1 = -3.16f;  // Ganancia para x
-static const float K2 = -5.94f;  // Ganancia para x_dot
-static const float K3 = 42.53f;  // Ganancia para theta
-static const float K4 = 4.91f;   // Ganancia para theta_dot
+static const float K1 = -10.00f;  // Ganancia para x
+static const float K2 = -10.45f;  // Ganancia para x_dot
+static const float K3 = 52.00f;  // Ganancia para theta
+static const float K4 = 8.34f;   // Ganancia para theta_dot
 
 // --- LÍMITES Y CONVERSIONES ---
+#define MAX_PULSE_FREQUENCY_HZ 160000 // Este es el límite físico que no queremos sobrepasar. 160,000 Hz.
+#define MIN_PULSE_FREQUENCY_HZ 10
 #define MAX_CONTROL_FORCE 10.0f // Límite de la fuerza U (en Newtons) - A sintonizar
 #define FORCE_TO_ACCEL_SCALE (1.0f / (M_CART + M_POLE))
 // Necesitas la constante de tu modelo que convierte v_car a f_pulsos
@@ -119,6 +121,18 @@ void state_controller_task(void *arg) {
 
         int target_frequency = (int)fabs(target_velocity * VELOCITY_TO_FREQ_SCALE);
         int direction = (target_velocity >= 0) ? 1 : 0;
+
+        // Primero, manejamos el caso de parada (error dentro de la banda muerta del PID)
+        // o si la velocidad calculada es insignificante.
+        if (target_frequency < MIN_PULSE_FREQUENCY_HZ) {
+            target_frequency = 0; // Si es demasiado lento, lo consideramos como una parada.
+        }
+
+        // Comprobamos si la frecuencia calculada excede nuestro límite máximo.
+        if (target_frequency > MAX_PULSE_FREQUENCY_HZ) {
+            target_frequency = MAX_PULSE_FREQUENCY_HZ;
+            //ESP_LOGW(TAG, "¡Frecuencia saturada al máximo: %d Hz!", MAX_PULSE_FREQUENCY_HZ);
+        }
         
         // El número de pulsos se calcula para un movimiento continuo
         int num_pulses = (uint32_t)(target_frequency * PID_LOOP_PERIOD_MS) / 1000;
