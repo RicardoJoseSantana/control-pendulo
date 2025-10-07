@@ -6,7 +6,7 @@
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
-#include "pid_controller.h"
+#include "state_controller.h"
 #include "pulse_counter.h"
 #include "system_status.h"
 #include "driver/gpio.h"

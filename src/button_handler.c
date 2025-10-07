@@ -6,7 +6,7 @@
 #include "driver/gpio.h"
 #include "esp_log.h"
 #include "uart_echo.h" // Incluimos para acceder a la cola y la estructura de comando
-#include "pid_controller.h"
+#include "state_controller.h"
 #include "pwm_generator.h"
 #include "pulse_counter.h"
 #include "system_status.h" // Para manejar el estado del movimiento manual
@@ -226,7 +226,7 @@ void button_handler_task(void *arg)
                 //execute_movement(MANUAL_MOVE_PULSES, MANUAL_MOVE_SPEED_HZ, 0);
                 motor_command_t cmd = {
                     .num_pulses = JOG_PULSES,
-                    .frequency = JOG_SPEED_HZ,
+                    .target_frequency = JOG_SPEED_HZ,
                     .direction = 0
                 };
                 xQueueOverwrite(motor_command_queue, &cmd);
@@ -241,7 +241,7 @@ void button_handler_task(void *arg)
                 // execute_movement(MANUAL_MOVE_PULSES, MANUAL_MOVE_SPEED_HZ, 1);
                 motor_command_t cmd = {
                     .num_pulses = JOG_PULSES,
-                    .frequency = JOG_SPEED_HZ,
+                    .target_frequency = JOG_SPEED_HZ,
                     .direction = 1
                 };
                 xQueueOverwrite(motor_command_queue, &cmd);

@@ -3,14 +3,11 @@
 #include <stdlib.h> // Para atoi
 #include "uart_echo.h"
 #include "freertos/queue.h" // Necesario para crear la cola
-#include "pid_controller.h"
+#include "state_controller.h"
 
 static const char *TAG = "UART_ECHO";
 
-// Definimos la cola de comandos
-// QueueHandle_t pwm_command_queue;
-
-/*void uart_echo_task(void *arg) {
+void uart_echo_task(void *arg) {
 
     uart_config_t uart_config = {
         .baud_rate = 115200,
@@ -31,31 +28,28 @@ static const char *TAG = "UART_ECHO";
         vTaskDelete(NULL);
     }
 
-    //ESP_LOGI(TAG, "Tarea de eco UART iniciada.");
-    //ESP_LOGI(TAG, "Formato: PULSOS <#pulsos> <frec> <dir>. Ej: PULSOS 200 1000 1");
     ESP_LOGI(TAG, "Consola de Sintonización iniciada.");
-    ESP_LOGI(TAG, "Comandos: SETKP <valor>, SETKI <valor>, SETKD <valor>");
+    ESP_LOGI(TAG, "Comandos: SETPOS <metros>, TELEMETRY <0|1>");
 
     while (1) {
-        int len = uart_read_bytes(UART_PORT, data, (BUF_SIZE - 1), 100 / portTICK_PERIOD_MS);
+        int len = uart_read_bytes(UART_PORT, data, (BUF_SIZE - 1), 20 / portTICK_PERIOD_MS);
         if (len > 0) {
             data[len] = '\0';
             ESP_LOGI(TAG, "Recibido: %s", (char *) data);
-            //uart_write_bytes(UART_PORT, (const char *) data, len); // Eco de lo recibido
 
-            // --- LÓGICA DE PARSEO ---
+            // --- LÓGICA DE PARSEO MODIFICADA ---
             char *cmd = strtok((char *)data, " ");
-            char *val = strtok(NULL, " \r\n");
+            char *val_str = strtok(NULL, " \r\n");
 
-            if (cmd != NULL && val != NULL) {
-                float value = atof(val); // Convertir el string a float
-                if (strcmp(cmd, "SETKP") == 0) {
-                    pid_set_kp(value);
-                } else if (strcmp(cmd, "SETKI") == 0) {
-                    pid_set_ki(value);
-                } else if (strcmp(cmd, "SETKD") == 0) {
-                    pid_set_kd(value);
-                } else {
+            if (cmd != NULL && val_str != NULL) {
+                if (strcmp(cmd, "SETPOS") == 0) {
+                    float position_m = atof(val_str);
+                    state_controller_set_cart_setpoint(position_m);
+                    ESP_LOGI(TAG, "Nuevo setpoint de posición del carro: %.2f m", position_m);
+                } 
+                // Aquí podrías añadir los comandos SETK1, SETK2, etc. si los necesitas.
+                // else if (strcmp(cmd, "TELEMETRY") == 0) { ... }
+                else {
                     uart_write_bytes(UART_PORT, "Comando desconocido.\r\n", strlen("Comando desconocido.\r\n"));
                 }
             } else {
@@ -63,4 +57,4 @@ static const char *TAG = "UART_ECHO";
             }
         }
     }
-}*/
+}

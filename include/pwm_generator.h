@@ -10,15 +10,15 @@
 //#include "pwm_generator.h"
 
 // Definiciones para el PWM
-#define LEDC_OUTPUT_IO          (GPIO_NUM_32) // Elige el GPIO que quieras para la salida PWM
-#define LEDC_DIRECTION_IO       (GPIO_NUM_33) // Pin de salida para la dirección
+#define STEP_OUTPUT_IO          (GPIO_NUM_32) // Elige el GPIO que quieras para la salida PWM
+#define DIR_OUTPUT_IO       (GPIO_NUM_33) // Pin de salida para la dirección
 #define MCPWM_UNIT              MCPWM_UNIT_0
 #define MCPWM_TIMER             MCPWM_TIMER_0
 
 typedef struct
 {
   int num_pulses;
-  int frequency;
+  int target_frequency;
   int direction;
 } motor_command_t;
 

@@ -10,17 +10,10 @@
 #include "pwm_generator.h"  // Para la tarea de control del motor
 #include "pulse_counter.h"  // Para la tarea de lectura del encoder
 #include "button_handler.h" // Para la tarea de lectura del botón
-#include "pid_controller.h"
+#include "state_controller.h"
 #include "freertos/queue.h"
 #include "lcd_controller.h" // ¡Solo incluimos nuestro módulo!
 #include "system_status.h"
-
-/*typedef struct
-{
-  int num_pulses;
-  int frequency;
-  int direction;
-} motor_command_t;*/
 
 QueueHandle_t motor_command_queue;
 
@@ -45,19 +38,9 @@ void app_main(void)
   }
 
   // --------- Cada tarea se ejecutará de forma independiente y concurrente. ---------
-
-  // Crear la tarea del controlador PID (prioridad mas alta)
-  xTaskCreate(state_controller_task, "PID_Controller", configMINIMAL_STACK_SIZE * 4, NULL, 5, NULL);
-  
-  // Crear la tarea del control del motor
-  xTaskCreate(motor_control_task, "Motor_Control", configMINIMAL_STACK_SIZE * 3, NULL, 4, NULL);
-
-  // Tarea para manejar los comandos recibidos por el puerto serie
-  // xTaskCreate(uart_echo_task, "uart_echo_task", configMINIMAL_STACK_SIZE * 3, NULL, 3, NULL);
-
-  // Tarea que monitorea el botón BOOT y envía comandos de "repetir"
-  xTaskCreate(button_handler_task, "button_handler_task", configMINIMAL_STACK_SIZE * 3, NULL, 4, NULL);
-
-  // TAREA DE LA PANTALLA (Prioridad baja, no es crítica)
-  xTaskCreate(lcd_display_task, "lcd_display_task", 3072, NULL, 4, NULL);
+  xTaskCreate(state_controller_task, "State_Controller", 4096, NULL, 6, NULL);   
+  xTaskCreate(motor_control_task, "Motor_Control", 3072, NULL, 5, NULL);
+  xTaskCreate(uart_echo_task, "uart_echo_task", 3072, NULL, 4, NULL);
+  xTaskCreate(button_handler_task, "button_handler_task", 3072, NULL, 4, NULL);
+  xTaskCreate(lcd_display_task, "lcd_display_task", 3072, NULL, 3, NULL);
 }
