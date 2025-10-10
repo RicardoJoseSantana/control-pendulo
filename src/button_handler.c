@@ -102,7 +102,7 @@ void button_handler_task(void *arg)
                 // Llama a la función que solo deshabilita
                 pid_force_disable();
             }
-            vTaskDelay(pdMS_TO_TICKS(50)); // Debounce
+            //vTaskDelay(pdMS_TO_TICKS(50)); // Debounce
         }
         last_stop_button_state = current_stop_button_state;
         
@@ -113,7 +113,7 @@ void button_handler_task(void *arg)
                 // Llama a la función que solo deshabilita
                 pid_force_disable();
             }
-            vTaskDelay(pdMS_TO_TICKS(50)); // Debounce
+
         }
         last_stop_button_state = current_stop_button_state_new;
 
@@ -156,12 +156,6 @@ void button_handler_task(void *arg)
                 ESP_LOGW(TAG, "Límite 1 detectado en: %ld pulsos", limit_left_pos);
                 vTaskDelay(pdMS_TO_TICKS(200)); // Pausa para estabilizar
 
-                // --- AÑADIDO: Moverse un poco para liberar el interruptor ---
-                ESP_LOGI(TAG, "Liberando el interruptor...");
-                execute_movement(JOG_PULSES * 5, JOG_SPEED_HZ, 1); // Mover un poco a la derecha
-                g_car_position_pulses += JOG_PULSES * 5;
-                vTaskDelay(pdMS_TO_TICKS(200));
-
 
                 // 2. Mover a la derecha hasta que el final de carrera se active
                 ESP_LOGI(TAG, "Buscando límite derecho...");
@@ -186,9 +180,9 @@ void button_handler_task(void *arg)
                 g_car_position_pulses = 0; //resetear el contador de posicion del carro
                 
                 ESP_LOGW(TAG, "--- CALIBRACIÓN FINALIZADA. Posición: %ld ---", g_car_position_pulses);
-                ESP_LOGI(TAG, "Esperando 2 segundos para estabilizar...");
+                ESP_LOGI(TAG, "Esperando 5 segundos para estabilizar...");
                 
-                vTaskDelay(pdMS_TO_TICKS(2000));
+                vTaskDelay(pdMS_TO_TICKS(5000));
 
                 // --- AÑADIDO: Cálculo y establecimiento del setpoint vertical ---
                 ESP_LOGI(TAG, "Calculando setpoint vertical...");

@@ -30,7 +30,9 @@
 // Banda muerta (Dead Band). Si el error (en cuentas del encoder) es menor que
 // este valor, lo consideramos cero. Esto es CRUCIAL para evitar que el motor
 // vibre o "tiemble" constantemente tratando de corregir errores minúsculos.
-#define DEAD_BAND_PULSES   20
+#define DEAD_BAND_ANGLE   1.6f //con factor de crecimiento de 0.088° o 0.1° 1.76
+
+#define DEAD_BAND_X_CM 5
 
 // Evita que el término integral crezca indefinidamente y desestabilice el sistema.
 // Este valor debe ser menor o igual a MAX_OUTPUT_PULSES.
@@ -48,15 +50,18 @@
 // Factor de escalado de velocidad. Hace que la corrección sea más rápida
 // para errores grandes. La frecuencia final será:
 // Frecuencia = BASE_FREQUENCY + (Error * FREQ_PER_ERROR_PULSE)
-#define FREQ_PER_ERROR_PULSE 80.0f
+#define FREQ_PER_ERROR_PULSE 80
 
 // Ganancia Proporcional para la posición del carro. Convierte el error de posición
 // en un pequeño ángulo de inclinación deseado (en cuentas del encoder).
 // Este es tu nuevo "dial" para controlar qué tan rápido vuelve el carro al centro.
-#define POSITION_CONTROL_GAIN 0.05f
+#define POSITION_CONTROL_GAIN 0.0005f//0.001//0.05f
 
 // Límite máximo para el offset del setpoint. Evita que pida ángulos demasiado grandes.
-#define MAX_SETPOINT_OFFSET 50 // Máximo offset de 50 cuentas
+#define MAX_SETPOINT_OFFSET 25 // Máximo offset de 50 cuentas
+
+//máxima frecuencia
+#define MAX_FRECUENCY_LIMIT 140000
 
 /************************************************************************************
  *                        FIN DE LA CONFIGURACIÓN DE PARÁMETROS                     *
@@ -162,6 +167,8 @@ bool pid_is_enabled(void)
 void pid_controller_task(void *arg)
 {
     TickType_t last_wake_time = xTaskGetTickCount();
+    float dead_band_x = DEAD_BAND_X_CM*37200/12; //convierte lo cm a pulsos utiles
+    int DEAD_BAND_PULSES = DEAD_BAND_ANGLE*4096/360; //convierte el angulo a pulsos utiles
 
     // Reseteamos el error anterior al habilitar para evitar un pico inicial en D
     pid_toggle_enable(); // Habilita y resetea
@@ -183,17 +190,21 @@ void pid_controller_task(void *arg)
 
         // --- Lógica de control de posición ---
         // a. Calcular el error de posición del carro (queremos que sea 0)
-        float position_error = 0.0f - g_car_position_pulses;
+        float position_error = g_car_position_pulses - 0.0f;
         // b. Convertir el error de posición en un pequeño offset para el setpoint del ángulo
         float setpoint_offset = position_error * POSITION_CONTROL_GAIN;
         // c. Limitar (saturar) el offset para que no pida ángulos peligrosos
         if (setpoint_offset > MAX_SETPOINT_OFFSET) setpoint_offset = MAX_SETPOINT_OFFSET;
         if (setpoint_offset < -MAX_SETPOINT_OFFSET) setpoint_offset = -MAX_SETPOINT_OFFSET;
         // d. Calcular el setpoint dinámico para este ciclo
+        if (g_car_position_pulses<dead_band_x && g_car_position_pulses>(-1*dead_band_x)) {
+            setpoint_offset=0;
+        }
         int16_t dynamic_setpoint = g_absolute_setpoint + (int16_t)setpoint_offset;
 
         // 2. CALCULAR ERROR de ángulo usando el setpoint dinámico
         float angle_error = dynamic_setpoint - current_angle;
+        //float angle_error = 0 - current_angle;
 
         // 3. APLICAR BANDA MUERTA
         if (fabs(angle_error) < DEAD_BAND_PULSES)
@@ -262,7 +273,11 @@ void pid_controller_task(void *arg)
                 if (duration_ms < PID_LOOP_PERIOD_MS) {
                     // ... recalculamos el número de pulsos para que el movimiento 
                     // llene exactamente un ciclo de control. Esto crea la continuidad.
-                    num_pulses = (uint32_t)(frequency * PID_LOOP_PERIOD_MS) / 1000;
+                    num_pulses = 2*(uint32_t)(frequency * PID_LOOP_PERIOD_MS) / 1000;
+                }
+
+                if (frequency > MAX_FRECUENCY_LIMIT) {
+                    frequency = MAX_FRECUENCY_LIMIT;
                 }
 
                 // 4. Enviar el comando (posiblemente ajustado) a la cola del motor
