@@ -38,7 +38,7 @@ static const char *TAG = "BUTTON_HANDLER";
 // extern bool g_pid_enabled;
 
 // --- Contador de posición del carro en micropasos ---
-static int32_t g_car_position_pulses = 0;
+// static int32_t g_car_position_pulses = 0;
 
 // Función auxiliar para botones de comando (pulsar y soltar)
 static bool is_command_button_pressed(int gpio_num)
@@ -108,7 +108,7 @@ void button_handler_task(void *arg)
                 // Llama a la función que solo deshabilita
                 pid_force_disable();
             }
-            vTaskDelay(pdMS_TO_TICKS(50)); // Debounce
+            // vTaskDelay(pdMS_TO_TICKS(50)); // Debounce
         }
         last_stop_button_state = current_stop_button_state;
 
@@ -121,7 +121,6 @@ void button_handler_task(void *arg)
                 // Llama a la función que solo deshabilita
                 pid_force_disable();
             }
-            vTaskDelay(pdMS_TO_TICKS(50)); // Debounce
         }
         last_stop_button_state = current_stop_button_state_new;
 
@@ -165,12 +164,6 @@ void button_handler_task(void *arg)
                 ESP_LOGW(TAG, "Límite 1 detectado en: %ld pulsos", limit_left_pos);
                 vTaskDelay(pdMS_TO_TICKS(200)); // Pausa para estabilizar
 
-                // --- AÑADIDO: Moverse un poco para liberar el interruptor ---
-                ESP_LOGI(TAG, "Liberando el interruptor...");
-                execute_movement(JOG_PULSES * 5, JOG_SPEED_HZ, 1); // Mover un poco a la derecha
-                g_car_position_pulses += JOG_PULSES * 5;
-                vTaskDelay(pdMS_TO_TICKS(200));
-
                 // 2. Mover a la derecha hasta que el final de carrera se active
                 ESP_LOGI(TAG, "Buscando límite derecho...");
                 while (gpio_get_level(EMERGENCY_STOP_GPIO_LEFT) == 1)
@@ -192,12 +185,12 @@ void button_handler_task(void *arg)
                 int32_t pulses_to_center = abs(center_pos - g_car_position_pulses);
                 int direction_to_center = (center_pos > g_car_position_pulses) ? 1 : 0;
                 execute_movement(pulses_to_center, JOG_SPEED_HZ, direction_to_center);
-                g_car_position_pulses = center_pos;
+                g_car_position_pulses = center_pos; // antes en cero
 
                 ESP_LOGW(TAG, "--- CALIBRACIÓN FINALIZADA. Posición: %ld ---", g_car_position_pulses);
-                ESP_LOGI(TAG, "Esperando 2 segundos para estabilizar...");
+                ESP_LOGI(TAG, "Esperando 5 segundos para estabilizar..."); // antes en dos segundos
 
-                vTaskDelay(pdMS_TO_TICKS(2000));
+                vTaskDelay(pdMS_TO_TICKS(5000));
 
                 // --- AÑADIDO: Cálculo y establecimiento del setpoint vertical ---
                 ESP_LOGI(TAG, "Calculando setpoint vertical...");

@@ -5,6 +5,9 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+// la posición del carro
+extern volatile int32_t g_car_position_pulses;
+
 /**
  * @brief Tarea principal del controlador PID.
  * Se ejecuta a una frecuencia fija para leer el sensor y controlar el motor.
@@ -38,6 +41,7 @@ void pid_set_kd(float kd);
  * @return El setpoint actual en cuentas del encoder.
  */
 int16_t pid_get_setpoint(void);
+void pid_set_absolute_setpoint(int16_t new_setpoint);
 
 /**
  * @brief Devuelve si el bucle de control del PID está actualmente habilitado.
@@ -48,8 +52,6 @@ bool pid_is_enabled(void);
 // para parada de emergencia.
 
 void pid_force_disable(void);
-
-void pid_set_absolute_setpoint(int16_t new_setpoint);
 
 // --- AÑADIDO: Funciones para obtener los valores de las ganancias ---
 float pid_get_kp(void);

@@ -204,7 +204,7 @@ void lcd_display_task(void *pvParameters)
             // Línea 2: Posición en grados
             int16_t position = pulse_counter_get_value();
             float degrees = (float)position * 360.0f / 4096.0f;
-            lcd_printf_line(1, "Grados: %.1f", degrees);
+            lcd_printf_line(1, "Grados: %.1f", degrees - 180);
             break;
         }
 
