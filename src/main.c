@@ -27,28 +27,29 @@ QueueHandle_t motor_command_queue;
 void app_main(void)
 {
 
-  lcd_init(); // Inicializar la pantalla
-  pwm_init(); // inicializa y configura pines del driver
+  pwm_init();           // inicializa y configura pines del driver
   pulse_counter_init(); // inicializa y configura pines del encoder
+  lcd_init();           // Inicializar la pantalla
 
   // Mensaje de bienvenida en la pantalla
   lcd_clear();
   lcd_printf_line(0, "Bienvenidos...");
   lcd_printf_line(1, "Iniciando");
   vTaskDelay(pdMS_TO_TICKS(1000));
-  
+
   // Creacion de la cola de tareas
   motor_command_queue = xQueueCreate(1, sizeof(motor_command_t));
-  if (motor_command_queue == NULL) {
-      ESP_LOGE("MAIN", "Error al crear la cola del motor.");
-      return;
+  if (motor_command_queue == NULL)
+  {
+    ESP_LOGE("MAIN", "Error al crear la cola del motor.");
+    return;
   }
 
   // --------- Cada tarea se ejecutará de forma independiente y concurrente. ---------
 
   // Crear la tarea del controlador PID (prioridad mas alta)
   xTaskCreate(pid_controller_task, "PID_Controller", configMINIMAL_STACK_SIZE * 4, NULL, 5, NULL);
-  
+
   // Crear la tarea del control del motor
   xTaskCreate(motor_control_task, "Motor_Control", configMINIMAL_STACK_SIZE * 3, NULL, 4, NULL);
 
@@ -62,5 +63,7 @@ void app_main(void)
   xTaskCreate(button_handler_task, "button_handler_task", configMINIMAL_STACK_SIZE * 3, NULL, 4, NULL);
 
   // TAREA DE LA PANTALLA (Prioridad baja, no es crítica)
-  xTaskCreate(lcd_display_task, "lcd_display_task", 3072, NULL, 4, NULL);
+  xTaskCreate(lcd_display_task, "LCDDisplay", 3072, NULL, 3, NULL);
+
+  ESP_LOGI("MAIN", "Arranque del sistema completado.");
 }

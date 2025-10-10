@@ -50,6 +50,10 @@
 // Frecuencia = BASE_FREQUENCY + (Error * FREQ_PER_ERROR_PULSE)
 #define FREQ_PER_ERROR_PULSE 80.0f
 
+//#define MAX_SETPOINT_OFFSET 10 //MAXIMO OFFSET DE 50 CUENTAS
+
+#define MAX_FRECUENCY_LIMIT 150000 //MAXIMA FRECUENCIA DE TRABAJO DEL MOTOR
+
 /************************************************************************************
  *                        FIN DE LA CONFIGURACIÓN DE PARÁMETROS                     *
  ************************************************************************************/
@@ -266,9 +270,12 @@ void pid_controller_task(void *arg)
                 if (duration_ms < PID_LOOP_PERIOD_MS) {
                     // ... recalculamos el número de pulsos para que el movimiento 
                     // llene exactamente un ciclo de control. Esto crea la continuidad.
-                    num_pulses = (uint32_t)(frequency * PID_LOOP_PERIOD_MS) / 1000;
+                    num_pulses = 2*(uint32_t)(frequency * PID_LOOP_PERIOD_MS) / 1000;
                 }
 
+                if (frequency > MAX_FRECUENCY_LIMIT) {
+                    frequency = MAX_FRECUENCY_LIMIT; // Limitamos la frecuencia máxima
+                }
                 // 4. Enviar el comando (posiblemente ajustado) a la cola del motor
                 motor_command_t cmd = {
                     .num_pulses = num_pulses,

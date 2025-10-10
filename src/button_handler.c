@@ -14,11 +14,11 @@
 // --- PINES DE LOS BOTONES ---
 #define VIEW_CYCLE_BUTTON_GPIO GPIO_NUM_15 // ¡NUEVO BOTÓN!
 #define CALIBRATION_BUTTON_GPIO GPIO_NUM_0
-#define ENABLE_PID_BUTTON_GPIO GPIO_NUM_23   // Botón para Habilitar/Deshabilitar PID
-#define MANUAL_LEFT_BUTTON_GPIO GPIO_NUM_21  // Nuevo botón para mover a la izquierda
-#define MANUAL_RIGHT_BUTTON_GPIO GPIO_NUM_22 // Nuevo botón para mover a la derecha
-#define EMERGENCY_STOP_GPIO_LEFT GPIO_NUM_34      // Botón de parada de emergencia izquierdo
-#define EMERGENCY_STOP_GPIO_RIGHT GPIO_NUM_35      // Botón de parada de emergencia derecho
+#define ENABLE_PID_BUTTON_GPIO GPIO_NUM_23    // Botón para Habilitar/Deshabilitar PID
+#define MANUAL_LEFT_BUTTON_GPIO GPIO_NUM_16   // Nuevo botón para mover a la izquierda
+#define MANUAL_RIGHT_BUTTON_GPIO GPIO_NUM_17  // Nuevo botón para mover a la derecha
+#define EMERGENCY_STOP_GPIO_LEFT GPIO_NUM_34  // Botón de parada de emergencia izquierdo
+#define EMERGENCY_STOP_GPIO_RIGHT GPIO_NUM_35 // Botón de parada de emergencia derecho
 
 // --- PARÁMETROS DE MOVIMIENTO MANUAL ---
 /*#define MANUAL_MOVE_SPEED_HZ 20000 // Velocidad constante para el movimiento manual (alta)
@@ -29,9 +29,9 @@
 #define SEQUENCE_BASE_SPEED_HZ 5000*/
 
 // --- PARÁMETROS DE MOVIMIENTO ---
-#define JOG_SPEED_HZ          20000 // Velocidad para el movimiento manual (jog)
-#define JOG_PULSES            400   // Pulsos por ciclo de jog
-#define CALIBRATION_SPEED_HZ  20000  // Velocidad constante para la calibración
+#define JOG_SPEED_HZ 20000         // Velocidad para el movimiento manual (jog)
+#define JOG_PULSES 400             // Pulsos por ciclo de jog
+#define CALIBRATION_SPEED_HZ 20000 // Velocidad constante para la calibración
 
 static const char *TAG = "BUTTON_HANDLER";
 // Para saber si el PID está activo, llamaremos a una función.
@@ -41,11 +41,15 @@ static const char *TAG = "BUTTON_HANDLER";
 static int32_t g_car_position_pulses = 0;
 
 // Función auxiliar para botones de comando (pulsar y soltar)
-static bool is_command_button_pressed(int gpio_num) {
-    if (gpio_get_level(gpio_num) == 0) {
+static bool is_command_button_pressed(int gpio_num)
+{
+    if (gpio_get_level(gpio_num) == 0)
+    {
         vTaskDelay(pdMS_TO_TICKS(50)); // Debounce
-        if (gpio_get_level(gpio_num) == 0) {
-            while(gpio_get_level(gpio_num) == 0) {
+        if (gpio_get_level(gpio_num) == 0)
+        {
+            while (gpio_get_level(gpio_num) == 0)
+            {
                 vTaskDelay(pdMS_TO_TICKS(50));
             }
             return true;
@@ -76,7 +80,7 @@ void button_handler_task(void *arg)
     ESP_LOGI(TAG, "Tarea iniciada. BOOT:Habilitar PID. GPIO21:Izquierda. GPIO22:Derecha.");
 
     int last_button_state = 1; // 1 = no presionado
-    //int last_sequence_button_state = 1;
+    // int last_sequence_button_state = 1;
     int last_stop_button_state = 1;
     int last_view_button_state = 1;
 
@@ -96,20 +100,24 @@ void button_handler_task(void *arg)
         last_view_button_state = current_view_button_state;
         // --- AÑADIDO: Lógica para la Parada de Emergencia (máxima prioridad) ---
         int current_stop_button_state = gpio_get_level(EMERGENCY_STOP_GPIO_RIGHT);
-        if (last_stop_button_state == 1 && current_stop_button_state == 0) {
-            
-            if (gpio_get_level(EMERGENCY_STOP_GPIO_RIGHT) == 0) {
+        if (last_stop_button_state == 1 && current_stop_button_state == 0)
+        {
+
+            if (gpio_get_level(EMERGENCY_STOP_GPIO_RIGHT) == 0)
+            {
                 // Llama a la función que solo deshabilita
                 pid_force_disable();
             }
             vTaskDelay(pdMS_TO_TICKS(50)); // Debounce
         }
         last_stop_button_state = current_stop_button_state;
-        
+
         int current_stop_button_state_new = gpio_get_level(EMERGENCY_STOP_GPIO_LEFT);
-        if (last_stop_button_state == 1 && current_stop_button_state_new == 0) {
-            
-            if (gpio_get_level(EMERGENCY_STOP_GPIO_LEFT) == 0) {
+        if (last_stop_button_state == 1 && current_stop_button_state_new == 0)
+        {
+
+            if (gpio_get_level(EMERGENCY_STOP_GPIO_LEFT) == 0)
+            {
                 // Llama a la función que solo deshabilita
                 pid_force_disable();
             }
@@ -136,18 +144,19 @@ void button_handler_task(void *arg)
         if (!pid_is_enabled())
         {
 
-            
             // --- LÓGICA DE CALIBRACIÓN (HOMING) ---
-            if (is_command_button_pressed(CALIBRATION_BUTTON_GPIO)) {
+            if (is_command_button_pressed(CALIBRATION_BUTTON_GPIO))
+            {
                 ESP_LOGW(TAG, "--- INICIANDO RUTINA DE CALIBRACIÓN DE LÍMITES ---");
-                
+
                 int32_t limit_left_pos, limit_right_pos;
                 g_car_position_pulses = 0;
 
                 // 1. Mover a la izquierda hasta que el final de carrera se active
                 ESP_LOGI(TAG, "Buscando límite derecho (GPIO %d)...", EMERGENCY_STOP_GPIO_RIGHT);
                 // Leemos el estado del pin directamente. El bucle continúa MIENTRAS el botón NO esté presionado.
-                while (gpio_get_level(EMERGENCY_STOP_GPIO_RIGHT) == 1) {
+                while (gpio_get_level(EMERGENCY_STOP_GPIO_RIGHT) == 1)
+                {
                     int pulses_moved = execute_movement(JOG_PULSES, CALIBRATION_SPEED_HZ, 0); // Dir 0 = Izquierda
                     g_car_position_pulses -= pulses_moved;
                 }
@@ -162,10 +171,10 @@ void button_handler_task(void *arg)
                 g_car_position_pulses += JOG_PULSES * 5;
                 vTaskDelay(pdMS_TO_TICKS(200));
 
-
                 // 2. Mover a la derecha hasta que el final de carrera se active
                 ESP_LOGI(TAG, "Buscando límite derecho...");
-                while (gpio_get_level(EMERGENCY_STOP_GPIO_LEFT) == 1) {
+                while (gpio_get_level(EMERGENCY_STOP_GPIO_LEFT) == 1)
+                {
                     int pulses_moved = execute_movement(JOG_PULSES, CALIBRATION_SPEED_HZ, 1); // Dir 1 = Derecha
                     g_car_position_pulses += pulses_moved;
                 }
@@ -177,22 +186,22 @@ void button_handler_task(void *arg)
                 int32_t travel_range = abs(limit_right_pos - limit_left_pos);
                 int32_t center_pos = limit_left_pos + (travel_range / 2);
                 ESP_LOGW(TAG, "Recorrido: %ld pulsos. Centro: %ld", travel_range, center_pos);
-                
+
                 ESP_LOGI(TAG, "Moviendo al centro...");
-                
+
                 int32_t pulses_to_center = abs(center_pos - g_car_position_pulses);
                 int direction_to_center = (center_pos > g_car_position_pulses) ? 1 : 0;
                 execute_movement(pulses_to_center, JOG_SPEED_HZ, direction_to_center);
                 g_car_position_pulses = center_pos;
-                
+
                 ESP_LOGW(TAG, "--- CALIBRACIÓN FINALIZADA. Posición: %ld ---", g_car_position_pulses);
                 ESP_LOGI(TAG, "Esperando 2 segundos para estabilizar...");
-                
+
                 vTaskDelay(pdMS_TO_TICKS(2000));
 
                 // --- AÑADIDO: Cálculo y establecimiento del setpoint vertical ---
                 ESP_LOGI(TAG, "Calculando setpoint vertical...");
-                
+
                 // 1. Leer la posición del encoder con el péndulo caído y centrado.
                 int16_t fallen_pos = pulse_counter_get_value();
                 ESP_LOGI(TAG, "Posición 'caída' detectada: %d", fallen_pos);
@@ -201,15 +210,13 @@ void button_handler_task(void *arg)
                 // Usamos el operador de módulo para manejar el "wrap-around" del contador de 16 bits.
                 int32_t vertical_setpoint_32 = fallen_pos + (ENCODER_RESOLUTION / 2);
                 int16_t vertical_setpoint_16 = (int16_t)vertical_setpoint_32; // Casting para el rango correcto
-                
+
                 // 3. Llamar a la función del PID para establecer el setpoint calculado.
                 pid_set_absolute_setpoint(vertical_setpoint_16);
-                
+
                 ESP_LOGW(TAG, "Setpoint vertical pre-calculado: %d. El sistema está listo.", vertical_setpoint_16);
                 ESP_LOGW(TAG, "Levante el péndulo y presione el botón de habilitar PID.");
             }
-
-
 
             // Leemos el estado de los botones de movimiento manual
             int left_button_state = gpio_get_level(MANUAL_LEFT_BUTTON_GPIO);
@@ -222,12 +229,11 @@ void button_handler_task(void *arg)
                 // Por seguridad, podríamos comprobar si el PID está deshabilitado aquí
                 ESP_LOGD(TAG, "Moviendo a la izquierda...");
                 // Asumimos que la dirección 0 es izquierda
-                //execute_movement(MANUAL_MOVE_PULSES, MANUAL_MOVE_SPEED_HZ, 0);
+                // execute_movement(MANUAL_MOVE_PULSES, MANUAL_MOVE_SPEED_HZ, 0);
                 motor_command_t cmd = {
                     .num_pulses = JOG_PULSES,
                     .frequency = JOG_SPEED_HZ,
-                    .direction = 0
-                };
+                    .direction = 0};
                 xQueueOverwrite(motor_command_queue, &cmd);
             }
             // Si se presiona el botón derecho Y no el izquierdo
@@ -241,8 +247,7 @@ void button_handler_task(void *arg)
                 motor_command_t cmd = {
                     .num_pulses = JOG_PULSES,
                     .frequency = JOG_SPEED_HZ,
-                    .direction = 1
-                };
+                    .direction = 1};
                 xQueueOverwrite(motor_command_queue, &cmd);
             }
             else
