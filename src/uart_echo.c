@@ -55,6 +55,12 @@ void uart_echo_task(void *arg) {
                     pid_set_ki(value);
                 } else if (strcmp(cmd, "SETKD") == 0) {
                     pid_set_kd(value);
+                } else if (strcmp(cmd, "SETKPX") == 0) {
+                    pid_set_kpx(value);
+                } else if (strcmp(cmd, "SETKIX") == 0) {
+                    pid_set_kix(value);
+                } else if (strcmp(cmd, "SETKDX") == 0) {
+                    pid_set_kdx(value);
                 } else {
                     uart_write_bytes(UART_PORT, "Comando desconocido.\r\n", strlen("Comando desconocido.\r\n"));
                 }
