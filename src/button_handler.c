@@ -15,8 +15,8 @@
 #define VIEW_CYCLE_BUTTON_GPIO GPIO_NUM_15 // ¡NUEVO BOTÓN!
 #define CALIBRATION_BUTTON_GPIO GPIO_NUM_0
 #define ENABLE_PID_BUTTON_GPIO GPIO_NUM_23   // Botón para Habilitar/Deshabilitar PID
-#define MANUAL_LEFT_BUTTON_GPIO GPIO_NUM_21  // Nuevo botón para mover a la izquierda
-#define MANUAL_RIGHT_BUTTON_GPIO GPIO_NUM_22 // Nuevo botón para mover a la derecha
+#define MANUAL_LEFT_BUTTON_GPIO GPIO_NUM_16  // Nuevo botón para mover a la izquierda
+#define MANUAL_RIGHT_BUTTON_GPIO GPIO_NUM_17 // Nuevo botón para mover a la derecha
 #define EMERGENCY_STOP_GPIO_LEFT GPIO_NUM_34      // Botón de parada de emergencia izquierdo
 #define EMERGENCY_STOP_GPIO_RIGHT GPIO_NUM_35      // Botón de parada de emergencia derecho
 

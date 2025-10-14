@@ -5,7 +5,6 @@
 #include "freertos/task.h"
 
 // 1. Inclusión de todas las cabeceras de los módulos
-#include "nvs_flash.h"      // Para la memoria no volátil
 #include "uart_echo.h"      // Para la tarea de comandos UART
 #include "pwm_generator.h"  // Para la tarea de control del motor
 #include "pulse_counter.h"  // Para la tarea de lectura del encoder
@@ -27,15 +26,15 @@ QueueHandle_t motor_command_queue;
 void app_main(void)
 {
 
-  lcd_init(); // Inicializar la pantalla
+  //lcd_init(); // Inicializar la pantalla
   pwm_init(); // inicializa y configura pines del driver
   pulse_counter_init(); // inicializa y configura pines del encoder
 
   // Mensaje de bienvenida en la pantalla
-  lcd_clear();
+  /*lcd_clear();
   lcd_printf_line(0, "Bienvenidos...");
   lcd_printf_line(1, "Iniciando");
-  vTaskDelay(pdMS_TO_TICKS(1000));
+  vTaskDelay(pdMS_TO_TICKS(1000));*/
   
   // Creacion de la cola de tareas
   motor_command_queue = xQueueCreate(1, sizeof(motor_command_t));
@@ -62,5 +61,5 @@ void app_main(void)
   xTaskCreate(button_handler_task, "button_handler_task", configMINIMAL_STACK_SIZE * 3, NULL, 4, NULL);
 
   // TAREA DE LA PANTALLA (Prioridad baja, no es crítica)
-  xTaskCreate(lcd_display_task, "lcd_display_task", 3072, NULL, 4, NULL);
+  // xTaskCreate(lcd_display_task, "lcd_display_task", 3072, NULL, 4, NULL);
 }
