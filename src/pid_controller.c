@@ -30,9 +30,9 @@
 // Banda muerta (Dead Band). Si el error (en cuentas del encoder) es menor que
 // este valor, lo consideramos cero. Esto es CRUCIAL para evitar que el motor
 // vibre o "tiemble" constantemente tratando de corregir errores minúsculos.
-#define DEAD_BAND_ANGLE 1.6f // con factor de crecimiento de 0.088° o 0.1° 1.76
+#define DEAD_BAND_ANGLE 1.5f //1.0f//1.6f // con factor de crecimiento de 0.088° o 0.1° 1.76
 
-#define DEAD_BAND_X_CM 5
+#define DEAD_BAND_X_CM 3 //5
 
 // Evita que el término integral crezca indefinidamente y desestabilice el sistema.
 // Este valor debe ser menor o igual a MAX_OUTPUT_PULSES.
@@ -55,13 +55,13 @@
 // Ganancia Proporcional para la posición del carro. Convierte el error de posición
 // en un pequeño ángulo de inclinación deseado (en cuentas del encoder).
 // Este es tu nuevo "dial" para controlar qué tan rápido vuelve el carro al centro.
-#define POSITION_CONTROL_GAIN 0.0005f // 0.001//0.05f
+#define POSITION_CONTROL_GAIN 0.0003f // 0.001//0.0005f
 
 // Límite máximo para el offset del setpoint. Evita que pida ángulos demasiado grandes.
-#define MAX_SETPOINT_OFFSET 25 // Máximo offset de 50 cuentas
+#define MAX_SETPOINT_OFFSET 20 //25 // Máximo offset de 20 cuentas
 
 // máxima frecuencia
-#define MAX_FRECUENCY_LIMIT 140000
+#define MAX_FRECUENCY_LIMIT 150000
 
 /************************************************************************************
  *                        FIN DE LA CONFIGURACIÓN DE PARÁMETROS                     *
@@ -75,9 +75,9 @@ static const char *TAG = "PID_CONTROLLER";
 // Variables de estado globales para el controlador
 // para 3200pulse/rev kp=5, ki=1, kd=10, para 2000pulse/rev kp=70, ki=1, kd=10, para 10000pulse/rev kp=41, ki=0.4, kd=70
 static volatile bool g_pid_enabled = false;
-static float g_kp = 41.0; // Ganancia Proporcional: El "presente". Reacciona al error actual.
-static float g_ki = 0.4;  // Ganancia Integral: El "pasado". Corrige errores acumulados.
-static float g_kd = 70.0; // Ganancia Derivativa: El "futuro". Predice y amortigua.
+static float g_kp = 41.0;//41, 45, 50 // Ganancia Proporcional: El "presente". Reacciona al error actual.
+static float g_ki = 0.4;//0.4, 0.2, 0  // Ganancia Integral: El "pasado". Corrige errores acumulados.
+static float g_kd = 70.0;//70.0, 50, 0 // Ganancia Derivativa: El "futuro". Predice y amortigua.
 
 // --- Variable para el angulo del pendulo ---
 static volatile int16_t g_absolute_setpoint = 0; // Se inicializa en 0 por defecto

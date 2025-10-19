@@ -10,11 +10,12 @@
 #include "pwm_generator.h"
 #include "pulse_counter.h"
 #include "system_status.h" // Para manejar el estado del movimiento manual
+#include "lcd_controller.h"
 
 // --- PINES DE LOS BOTONES ---
-#define VIEW_CYCLE_BUTTON_GPIO GPIO_NUM_15 // ¡NUEVO BOTÓN!
-#define CALIBRATION_BUTTON_GPIO GPIO_NUM_0
-#define ENABLE_PID_BUTTON_GPIO GPIO_NUM_23    // Botón para Habilitar/Deshabilitar PID
+#define VIEW_CYCLE_BUTTON_GPIO GPIO_NUM_19 // ¡NUEVO BOTÓN!
+#define CALIBRATION_BUTTON_GPIO GPIO_NUM_15
+#define ENABLE_PID_BUTTON_GPIO GPIO_NUM_18    // Botón para Habilitar/Deshabilitar PID
 #define MANUAL_LEFT_BUTTON_GPIO GPIO_NUM_16   // Nuevo botón para mover a la izquierda
 #define MANUAL_RIGHT_BUTTON_GPIO GPIO_NUM_17  // Nuevo botón para mover a la derecha
 #define EMERGENCY_STOP_GPIO_LEFT GPIO_NUM_34  // Botón de parada de emergencia izquierdo
@@ -131,9 +132,8 @@ void button_handler_task(void *arg)
         {
             // Anti-rebote: esperar un poco y confirmar
             vTaskDelay(pdMS_TO_TICKS(50));
-            if (gpio_get_level(ENABLE_PID_BUTTON_GPIO) == 0)
+            if (gpio_get_level(ENABLE_PID_BUTTON_GPIO) == 0 && gpio_get_level(EMERGENCY_STOP_GPIO_LEFT) == 1 && gpio_get_level(EMERGENCY_STOP_GPIO_RIGHT) == 1)
             {
-
                 pid_toggle_enable();
             }
         }
@@ -148,10 +148,14 @@ void button_handler_task(void *arg)
             {
                 ESP_LOGW(TAG, "--- INICIANDO RUTINA DE CALIBRACIÓN DE LÍMITES ---");
 
+                // guardamos vista actual
+                int actual_view_int = (int)g_lcd_view_state;
+                g_lcd_view_state = VIEW_CALIBRATION; 
+                
                 int32_t limit_left_pos, limit_right_pos;
                 g_car_position_pulses = 0;
 
-                // 1. Mover a la izquierda hasta que el final de carrera se active
+                // 1. Mover a la izquierda hasta que el final de carrera se active                
                 ESP_LOGI(TAG, "Buscando límite derecho (GPIO %d)...", EMERGENCY_STOP_GPIO_RIGHT);
                 // Leemos el estado del pin directamente. El bucle continúa MIENTRAS el botón NO esté presionado.
                 while (gpio_get_level(EMERGENCY_STOP_GPIO_RIGHT) == 1)
@@ -185,7 +189,7 @@ void button_handler_task(void *arg)
                 int32_t pulses_to_center = abs(center_pos - g_car_position_pulses);
                 int direction_to_center = (center_pos > g_car_position_pulses) ? 1 : 0;
                 execute_movement(pulses_to_center, JOG_SPEED_HZ, direction_to_center);
-                g_car_position_pulses = center_pos; // antes en cero
+                g_car_position_pulses = 0;
 
                 ESP_LOGW(TAG, "--- CALIBRACIÓN FINALIZADA. Posición: %ld ---", g_car_position_pulses);
                 ESP_LOGI(TAG, "Esperando 5 segundos para estabilizar..."); // antes en dos segundos
@@ -209,6 +213,9 @@ void button_handler_task(void *arg)
 
                 ESP_LOGW(TAG, "Setpoint vertical pre-calculado: %d. El sistema está listo.", vertical_setpoint_16);
                 ESP_LOGW(TAG, "Levante el péndulo y presione el botón de habilitar PID.");
+
+                // devolvemos a la vista actual antes de la calibracion
+                g_lcd_view_state = (lcd_view_state_t)actual_view_int;
             }
 
             // Leemos el estado de los botones de movimiento manual

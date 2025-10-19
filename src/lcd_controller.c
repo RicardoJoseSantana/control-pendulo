@@ -20,17 +20,6 @@
 #define I2C_MASTER_FREQ_HZ 100000      // Frecuencia del bus (100kHz es estándar)
 #define LCD_ADDR 0x27                  // Dirección I2C del módulo. O Puede ser 0x3F.
 
-/*
-// --- CONFIGURACIÓN PRIVADA DEL MÓDULO (Pines sin cambios) ---
-#define LCD_RS_PIN GPIO_NUM_19
-#define LCD_E_PIN GPIO_NUM_18
-#define LCD_D4_PIN GPIO_NUM_5
-#define LCD_D5_PIN GPIO_NUM_17
-#define LCD_D6_PIN GPIO_NUM_16
-#define LCD_D7_PIN GPIO_NUM_4
-#define LCD_RW_PIN GPIO_NUM_2       // Pin para lectura y escritura
-#define LCD_BL_PIN HD44780_NOT_USED // No controlamos el backlight por GPIO
-*/
 // Etiqueta para los logs
 static const char *TAG = "LCD_CONTROLLER_I2C";
 
@@ -173,6 +162,7 @@ void lcd_display_task(void *pvParameters)
 {
     // vTaskDelay(pdMS_TO_TICKS(500)); // Dar tiempo a que otros módulos se inicien
     ESP_LOGI("LCD_TASK", "Tarea de visualización iniciada.");
+    float g_car_position_cm;
 
     while (1)
     {
@@ -208,11 +198,11 @@ void lcd_display_task(void *pvParameters)
             break;
         }
 
-        case VIEW_ENCODER_COUNTS:
+        case VIEW_POSITION:
         {
-            lcd_printf_line(0, "Encoder Crudo");
-            int16_t position = pulse_counter_get_value();
-            lcd_printf_line(1, "Pulsos: %d", position);
+            lcd_printf_line(0, "Posicion carro:");
+            g_car_position_cm = g_car_position_pulses * 12 / 37200;
+            lcd_printf_line(1, "%.1f cm", g_car_position_cm);
             break;
         }
 
@@ -228,6 +218,13 @@ void lcd_display_task(void *pvParameters)
             break;
         }
 
+        case VIEW_CALIBRATION:
+        {
+            lcd_printf_line(0, "Calibrando...");
+            lcd_printf_line(1, "Espere");
+            break;
+        }
+
         default:
             // Vista por defecto en caso de error
             lcd_printf_line(0, "Vista Invalida");
@@ -239,97 +236,3 @@ void lcd_display_task(void *pvParameters)
     }
 }
 
-/*
-// --- ¡NUEVA FUNCIÓN! Intenta leer el Busy Flag para ver si la LCD responde ---
-static bool is_lcd_responsive(void)
-{
-    // 1. Configurar temporalmente D7 como entrada y R/W como salida
-    gpio_set_direction(LCD_RS_PIN, GPIO_MODE_OUTPUT);
-    gpio_set_direction(LCD_RW_PIN, GPIO_MODE_OUTPUT);
-    gpio_set_direction(LCD_E_PIN, GPIO_MODE_OUTPUT);
-    gpio_set_direction(LCD_D7_PIN, GPIO_MODE_INPUT);
-    gpio_set_pull_mode(LCD_D7_PIN, GPIO_PULLUP_ONLY);
-
-    // 2. Poner la pantalla en modo LECTURA de COMANDO
-    gpio_set_level(LCD_RS_PIN, 0); // Comando
-    gpio_set_level(LCD_RW_PIN, 1); // Lectura
-    gpio_set_level(LCD_E_PIN, 0);
-
-    // 3. Dar un pulso en el pin E para que la LCD ponga el Busy Flag en D7
-
-    esp_rom_delay_us(1); // Pequeña espera
-    gpio_set_level(LCD_E_PIN, 1);
-    esp_rom_delay_us(1); // Pequeña espera
-
-    // 4. Leer el estado de D7. Si la LCD está alimentada, debería tirar de él a 0.
-    // Si está apagada, nuestro pull-up lo mantendrá en 1.
-    int level = gpio_get_level(LCD_D7_PIN); // Leer mientras E está en alto
-
-    // 5. Finalizar el pulso y volver al modo ESCRITURA
-    gpio_set_level(LCD_E_PIN, 0);
-    gpio_set_level(LCD_RW_PIN, 0); // Volver al modo Escritura por defecto
-    gpio_set_level(LCD_RS_PIN, 0); // Volver al modo Escritura por defecto
-
-    // Si leímos un nivel BAJO (0), significa que la pantalla respondió.
-    return (level == 0);
-}
-
-// --- IMPLEMENTACIÓN DE LAS FUNCIONES PÚBLICAS (Adaptadas a la nueva librería) ---
-
-void lcd_init(void)
-{
-    // Bucle de espera: Intentar conectar hasta que responda
-    while (!is_lcd_responsive())
-    {
-        ESP_LOGW(TAG, "Pantalla no detectada. Reintentando en 1 segundo...");
-        vTaskDelay(pdMS_TO_TICKS(1000));
-    }
-
-    ESP_LOGI(TAG, "¡Pantalla detectada! Inicializando librería hd44780...");
-    // Limpiar la estructura de configuración por seguridad
-    memset(&lcd_handle, 0, sizeof(hd44780_t));
-
-    // --- CORREGIDO: Configuración para conexión directa a GPIO ---
-
-    // 1. Asignar los pines GPIO
-    lcd_handle.pins.rs = LCD_RS_PIN;
-    lcd_handle.pins.e = LCD_E_PIN;
-    lcd_handle.pins.d4 = LCD_D4_PIN;
-    lcd_handle.pins.d5 = LCD_D5_PIN;
-    lcd_handle.pins.d6 = LCD_D6_PIN;
-    lcd_handle.pins.d7 = LCD_D7_PIN;
-    lcd_handle.pins.bl = LCD_BL_PIN;
-
-    // 2. Configurar las propiedades de la pantalla
-    lcd_handle.lines = 2; // Para una pantalla 20x4 o 16x2
-    lcd_handle.font = HD44780_FONT_5X8;
-
-    // 3. ¡IMPORTANTE! Dejar el callback a NULL.
-    // Al ser NULL, la librería sabrá que debe configurar y controlar los pines GPIO ella misma.
-    lcd_handle.write_cb = NULL;
-    // Opcional: El estado del backlight. Como no lo controlamos, lo dejamos en false.
-    lcd_handle.backlight = false;
-    */
-/* // Estos ya estaban aca, no abrir el comentario
-// Antes de llamar a la librería, configuramos todos los pines nosotros.
-// El pin RW también se configura como salida, empezando en BAJO (modo escritura).
-gpio_config_t io_conf = {
-    .pin_bit_mask = ((1ULL << LCD_RS_PIN) | (1ULL << LCD_E_PIN) | (1ULL << LCD_RW_PIN) |
-                     (1ULL << LCD_D4_PIN) | (1ULL << LCD_D5_PIN) | (1ULL << LCD_D6_PIN) |
-                     (1ULL << LCD_D7_PIN)),
-    .mode = GPIO_MODE_OUTPUT,
-};
-gpio_config(&io_conf);
-gpio_set_level(LCD_RW_PIN, 0);
-
-ESP_LOGI(TAG, "Esperando a que la pantalla LCD esté disponible...");
-
-*/
-/*
-    // Ahora que sabemos que está viva, dejamos que la librería la inicialice
-    hd44780_init(&lcd_handle);
-    ESP_LOGI(TAG, "LCD inicializada correctamente por la librería.");
-}
-
-
-*/

@@ -8,9 +8,9 @@
 #include "esp_log.h"
 
 // --- CONFIGURACIÓN DE PINES (Tus pines específicos) ---
-#define PCNT_INPUT_A_PIN    27 // Fase A del encoder
-#define PCNT_INPUT_B_PIN    14 // Fase B del encoder
-#define ENCODER_INDEX_Z_PIN 12 // Fase Z (índice) del encoder
+#define PCNT_INPUT_A_PIN    14 // Fase A del encoder
+#define PCNT_INPUT_B_PIN    12 // Fase B del encoder
+#define ENCODER_INDEX_Z_PIN 13 // Fase Z (índice) del encoder
 
 #define PCNT_UNIT           PCNT_UNIT_0
 //static const char *TAG = "PULSE_COUNTER_PCNT";

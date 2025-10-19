@@ -34,10 +34,13 @@ manual_move_state_t status_get_manual_move_state(void);
 typedef enum
 {
     VIEW_MAIN_STATUS,    // Vista principal: Estado PID y Posición en Grados
-    VIEW_ENCODER_COUNTS, // Vista secundaria: Posición en cuentas de encoder
+    VIEW_POSITION, // Vista secundaria: Posición del carro en cm
     VIEW_PID_GAINS,      // Vista terciaria: Valores de las ganancias Kp, Ki, Kd
-    VIEW_COUNT           // ¡Importante! Siempre al final, para saber cuántas vistas hay
+    VIEW_COUNT,           // ¡Importante! Siempre al final, para saber cuántas vistas hay
+    VIEW_CALIBRATION //++
 } lcd_view_state_t;
+
+extern volatile lcd_view_state_t g_lcd_view_state;
 
 /**
  * @brief Cambia a la siguiente vista de la pantalla.
