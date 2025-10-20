@@ -1,36 +1,58 @@
 // src/main.c
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
-
-// 1. Inclusión de todas las cabeceras de los módulos
-#include "nvs_flash.h"      // Para la memoria no volátil
+#include <stdio.h>
+#include <string.h>
+#include <stdlib.h>
 #include "uart_echo.h"      // Para la tarea de comandos UART
-#include "pwm_generator.h"  // Para la tarea de control del motor
-#include "pulse_counter.h"  // Para la tarea de lectura del encoder
-#include "button_handler.h" // Para la tarea de lectura del botón
+#include "stepperMotor.h"  // Para la tarea de control del motor
+
+static const char *TAG = "MOTOR";
 
 void app_main(void) {
-    // 2. Inicialización de servicios globales (primero que nada)
-    // Es crucial inicializar la partición de la NVS antes de que cualquier tarea intente usarla.
-    esp_err_t ret = nvs_flash_init();
-    if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
-      ESP_ERROR_CHECK(nvs_flash_erase());
-      ret = nvs_flash_init();
-    }
-    ESP_ERROR_CHECK(ret);
 
-    // 3. Creación de todas las tareas de la aplicación
-    // Cada tarea se ejecutará de forma independiente y concurrente.
+  ledc_init(); // Inicializa el módulo LEDC
+  uart_init(); // Inicializa el uart
 
-    // Tarea para manejar los comandos recibidos por el puerto serie
-    xTaskCreate(uart_echo_task, "uart_echo_task", configMINIMAL_STACK_SIZE * 3, NULL, 5, NULL);
+  uint8_t *data = (uint8_t *) malloc(BUF_SIZE);
+  if (data == NULL) {
+      ESP_LOGE(TAG, "No se pudo asignar memoria para el buffer UART");
+      vTaskDelete(NULL);
+  }
+  ESP_LOGI(TAG, "Formato: PULSOS <#pulsos> <frec> <dir>. Ej: PULSOS 200 1000 1");
 
-    // Tarea que espera comandos en la cola y mueve el motor
-    xTaskCreate(pwm_generator_task, "pwm_generator_task", configMINIMAL_STACK_SIZE * 3, NULL, 5, NULL);
+  while (1) {
 
-    // Tarea que inicializa el PCNT y reporta la posición del encoder para depuración
-    xTaskCreate(pulse_counter_task, "pulse_counter_task", configMINIMAL_STACK_SIZE * 3, NULL, 5, NULL);
+    int len = uart_read_bytes(UART_PORT, data, (BUF_SIZE - 1), 20 / portTICK_PERIOD_MS);
+        if (len > 0) {
+            data[len] = '\0';
+            ESP_LOGI(TAG, "Recibido: %s", (char *) data);
+            //uart_write_bytes(UART_PORT, (const char *) data, len); // Eco de lo recibido
 
-    // Tarea que monitorea el botón BOOT y envía comandos de "repetir"
-    xTaskCreate(button_handler_task, "button_handler_task", configMINIMAL_STACK_SIZE * 3, NULL, 5, NULL);
+            // --- LÓGICA DE PARSEO ---
+            char *cmd_token = strtok((char *)data, " ");
+            if (cmd_token != NULL && strcmp(cmd_token, "PULSOS") == 0) {
+                
+                char *pulses_token = strtok(NULL, " ");
+                char *freq_token = strtok(NULL, " ");
+                char *dir_token = strtok(NULL, " \r\n");
+
+                if (pulses_token != NULL && freq_token != NULL && dir_token != NULL) {
+                    int num_pulses = atoi(pulses_token);
+                    int frequency = atoi(freq_token);
+                    int direction = atoi(dir_token);
+
+                    // Validar los datos recibidos
+                    if (num_pulses > 0 && frequency > 0 && (direction == 0 || direction == 1)) {
+                        execute_movement(num_pulses, frequency, direction);
+                    } else {
+                        uart_write_bytes(UART_PORT, "Error: Argumentos inválidos.\r\n", strlen("Error: Argumentos inválidos.\r\n"));
+                    }
+                } else {
+                    uart_write_bytes(UART_PORT, "Error: Faltan argumentos. Formato: PULSOS <#pulsos> <frec> <dir>\r\n", strlen("Error: Faltan argumentos. Formato: PULSOS <#pulsos> <frec> <dir>\r\n"));
+                }
+            } else {
+                 uart_write_bytes(UART_PORT, "Comando desconocido.\r\n", strlen("Comando desconocido.\r\n"));
+            }
+        }
+  }
+
 }
