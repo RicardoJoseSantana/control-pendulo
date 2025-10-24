@@ -1,0 +1,9 @@
+{
+    "name": "i2c_lcd",
+    "version": "1.0.0",
+    "description": "Controlador para la pantalla LCD I2C y la tarea de visualización.",
+    "dependencies": {
+        "system_status": "*" ,
+        "button_handler": "*"
+    }
+}

@@ -1,0 +1,8 @@
+{
+    "name": "button_handler",
+    "version": "1.0.0",
+    "description": "Controlador para la lectura del botón y la tarea de manejo.",
+    "dependencies": {
+        "system_status": "*"
+    }
+}

@@ -1,5 +1,5 @@
-#ifndef LCD_CONTROLLER_H
-#define LCD_CONTROLLER_H
+#ifndef I2C_LCD_H
+#define I2C_LCD_H
 
 #include <stdint.h> // Para usar tipos como uint8_t
 
@@ -45,4 +45,4 @@ void lcd_printf_line(uint8_t row, const char *format, ...);
 // Declaración de la tarea de la visualizacion en pantalla
 void lcd_display_task(void *pvParameters);
 
-#endif // LCD_CONTROLLER_H```
+#endif 
