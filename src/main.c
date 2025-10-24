@@ -34,13 +34,13 @@ void app_main(void) {
         float angle = encoder_get_angle_degrees();
         
         // Imprimir el ángulo
-        ESP_LOGI(TAG, "Ángulo del Encoder: %.2f grados", angle);
+        ESP_LOGI(TAG, "Angulo del Encoder: %.2f grados", angle);
 
         // Comprobar si se ha detectado el pulso Z
         if (encoder_was_z_pulse_detected()) {
-            ESP_LOGW(TAG, "¡Pulso de ÍNDICE (Z) detectado! El contador se ha reseteado.");
+            ESP_LOGW(TAG, "¡Pulso de INDICE (Z) detectado! El contador se ha reseteado.");
         }
         
-        vTaskDelay(pdMS_TO_TICKS(1000)); // Mostrar datos 1 vez por segundo
+        vTaskDelay(pdMS_TO_TICKS(500)); // Mostrar datos 1 vez por segundo
     }
 }
