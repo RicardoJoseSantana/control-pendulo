@@ -1,36 +1,46 @@
 // src/main.c
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "esp_log.h"
+#include "encoder.h" // ¡Solo incluimos nuestra nueva librería!
 
-// 1. Inclusión de todas las cabeceras de los módulos
-#include "nvs_flash.h"      // Para la memoria no volátil
-#include "uart_echo.h"      // Para la tarea de comandos UART
-#include "pwm_generator.h"  // Para la tarea de control del motor
-#include "pulse_counter.h"  // Para la tarea de lectura del encoder
-#include "button_handler.h" // Para la tarea de lectura del botón
+// --- CONFIGURACIÓN DEL USUARIO ---
+#define ENCODER_PIN_A 27
+#define ENCODER_PIN_B 14
+#define ENCODER_PIN_Z 12
+#define ENCODER_PULSES_PER_REV 1024
+
+static const char *TAG = "MAIN_APP";
 
 void app_main(void) {
-    // 2. Inicialización de servicios globales (primero que nada)
-    // Es crucial inicializar la partición de la NVS antes de que cualquier tarea intente usarla.
-    esp_err_t ret = nvs_flash_init();
-    if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
-      ESP_ERROR_CHECK(nvs_flash_erase());
-      ret = nvs_flash_init();
+    // 1. Rellenar la estructura de configuración
+    encoder_config_t encoder_cfg = {
+        .pin_a = ENCODER_PIN_A,
+        .pin_b = ENCODER_PIN_B,
+        .pin_z = ENCODER_PIN_Z,
+        .pulses_per_rev = ENCODER_PULSES_PER_REV
+    };
+
+    // 2. Inicializar la librería
+    esp_err_t ret = encoder_init(&encoder_cfg);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Fallo al inicializar el encoder, deteniendo.");
+        return;
     }
-    ESP_ERROR_CHECK(ret);
 
-    // 3. Creación de todas las tareas de la aplicación
-    // Cada tarea se ejecutará de forma independiente y concurrente.
+    // 3. Bucle principal para mostrar los datos
+    while (1) {
+        // Obtener el ángulo actual usando la función de la librería
+        float angle = encoder_get_angle_degrees();
+        
+        // Imprimir el ángulo
+        ESP_LOGI(TAG, "Ángulo del Encoder: %.2f grados", angle);
 
-    // Tarea para manejar los comandos recibidos por el puerto serie
-    xTaskCreate(uart_echo_task, "uart_echo_task", configMINIMAL_STACK_SIZE * 3, NULL, 5, NULL);
-
-    // Tarea que espera comandos en la cola y mueve el motor
-    xTaskCreate(pwm_generator_task, "pwm_generator_task", configMINIMAL_STACK_SIZE * 3, NULL, 5, NULL);
-
-    // Tarea que inicializa el PCNT y reporta la posición del encoder para depuración
-    xTaskCreate(pulse_counter_task, "pulse_counter_task", configMINIMAL_STACK_SIZE * 3, NULL, 5, NULL);
-
-    // Tarea que monitorea el botón BOOT y envía comandos de "repetir"
-    xTaskCreate(button_handler_task, "button_handler_task", configMINIMAL_STACK_SIZE * 3, NULL, 5, NULL);
+        // Comprobar si se ha detectado el pulso Z
+        if (encoder_was_z_pulse_detected()) {
+            ESP_LOGW(TAG, "¡Pulso de ÍNDICE (Z) detectado! El contador se ha reseteado.");
+        }
+        
+        vTaskDelay(pdMS_TO_TICKS(1000)); // Mostrar datos 1 vez por segundo
+    }
 }

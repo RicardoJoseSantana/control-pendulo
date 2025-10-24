@@ -11,7 +11,7 @@
 sdkconfig.*
 
 # Archivos de dependencias (si usaras librerías de PlatformIO)
-/lib/
+# /lib/
 
 # Archivos de compilación de CMake
 /build/
