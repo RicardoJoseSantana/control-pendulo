@@ -12,7 +12,7 @@
 #include "button_handler.h" // Para la tarea de lectura del botón
 #include "pid_controller.h"
 #include "freertos/queue.h"
-#include "lcd_controller.h" // ¡Solo incluimos nuestro módulo!
+#include "i2c_lcd.h" // ¡Solo incluimos nuestro módulo!
 #include "system_status.h"
 
 /*typedef struct
