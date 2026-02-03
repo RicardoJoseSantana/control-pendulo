@@ -10,8 +10,14 @@
 .vscode/
 sdkconfig.*
 
-# Archivos de dependencias (si usaras librerías de PlatformIO)
-#/lib/
+.pio
+.vscode
+*.o
+*.a
+*.so
+*.elf
+*.bin
+*.map
 
 # Archivos de compilación de CMake
 /build/
