@@ -1,0 +1,5 @@
+{
+    "name": "system_status",
+    "version": "1.0.0",
+    "description": "Módulo para gestionar el estado global del sistema."
+}

@@ -16,7 +16,7 @@ manual_move_state_t status_get_manual_move_state(void)
     return g_manual_move_state;
 }
 
-// --- AÑADIDO: Lógica para el estado de la vista de la pantalla ---
+// --- Lógica para el estado de la vista de la pantalla ---
 volatile lcd_view_state_t g_lcd_view_state = VIEW_MAIN_STATUS;
 
 void status_cycle_lcd_view(void)

@@ -1,4 +1,4 @@
-#include "lcd_controller.h"
+#include "i2c_lcd.h"
 #include <stdio.h>   // Para vsnprintf
 #include <stdarg.h>  // Para va_list y macros relacionadas
 #include <string.h>  // Necesario para memset
@@ -7,8 +7,6 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "driver/i2c.h"
-#include "pid_controller.h"
-#include "pulse_counter.h"
 #include "system_status.h"
 #include "driver/gpio.h"
 #include "esp_rom_sys.h"
@@ -23,10 +21,17 @@
 // Etiqueta para los logs
 static const char *TAG = "LCD_CONTROLLER_I2C";
 
+static volatile bool g_is_pid_active_sim = false;
+
+// Implementación de la función pública
+bool button_handler_is_pid_active_sim(void) {
+    return g_is_pid_active_sim;
+}
+
 // Variable estática para el descriptor del dispositivo LCD
 static hd44780_t lcd_handle;
 
-// --- FUNCIÓN CALLBACK: El Puente entre hd44780 y I2C ---
+// --- FUNCIÓN CALLBACK: El Puente entre hd44780 e I2C ---
 // La librería hd44780 no sabe hablar I2C. Nosotros le "enseñamos" cómo
 // enviar un byte usando esta función.
 static esp_err_t write_lcd_data_i2c(const hd44780_t *lcd, uint8_t data)
@@ -81,7 +86,7 @@ void lcd_init(void)
     lcd_handle.pins.bl = 3; // El backlight está conectado al bit P3
 
     // c. Configuramos las propiedades de la pantalla
-    lcd_handle.lines = 2; // Para una pantalla 16x2
+    lcd_handle.lines = 2; // Para una pantalla 16x2 o 4 para una 20x4
     lcd_handle.font = HD44780_FONT_5X8;
     lcd_handle.backlight = true; // Queremos el backlight encendido por defecto
 
@@ -93,7 +98,6 @@ void lcd_init(void)
     ESP_LOGI(TAG, "LCD inicializada correctamente vía I2C.");
 }
 
-// --- EL RESTO DE FUNCIONES NO NECESITAN CAMBIOS ---
 // La belleza de esta arquitectura es que el resto de las funciones
 // (clear, gotoxy, puts, printf_line, y la tarea) no necesitan saber
 // si la comunicación es por GPIO directo o I2C. Simplemente llaman
@@ -102,28 +106,25 @@ void lcd_init(void)
 
 void lcd_clear(void)
 {
-    // La función para limpiar la pantalla ahora se llama hd44780_clear()
+    // La función para limpiar la pantalla
     hd44780_clear(&lcd_handle);
 }
 
 void lcd_set_cursor(uint8_t col, uint8_t row)
 {
-    /* // La función para posicionar el cursor es la misma
-    hd44780_set_cursor(&lcd_handle, col, row);
-    */
-    // --- CORREGIDO: La función se llama hd44780_gotoxy ---
+    // La función para posicionar el cursor 
     hd44780_gotoxy(&lcd_handle, col, row);
 }
 
 void lcd_write_string(const char *str)
 {
-    // La función para escribir una cadena ahora se llama hd44780_puts()
+    // La función para escribir una cadena de texto
     hd44780_puts(&lcd_handle, str);
 }
 
 void lcd_printf_line(uint8_t row, const char *format, ...)
 {
-// --- CORRECCIÓN 2: Ajustar al tamaño real de la pantalla ---
+// Ajustar al tamaño real de la pantalla ---
 // Definimos el ancho de la pantalla para no usar "números mágicos"
 #define LCD_LINE_WIDTH 16 // Cambia a 20 si usas una 20x4
 
@@ -174,7 +175,7 @@ void lcd_display_task(void *pvParameters)
         {
         case VIEW_MAIN_STATUS:
         {
-            bool is_pid_on = pid_is_enabled();
+            bool is_pid_on = button_handler_is_pid_active_sim();
             manual_move_state_t move_state = status_get_manual_move_state();
 
             // Línea 1: Estado prioritario
@@ -192,7 +193,7 @@ void lcd_display_task(void *pvParameters)
             }
 
             // Línea 2: Posición en grados
-            int16_t position = pulse_counter_get_value();
+            int16_t position = 4592; // encoder_get_position_degrees();
             float degrees = (float)position * 360.0f / 4096.0f;
             lcd_printf_line(1, "Grados: %.1f", degrees - 180);
             break;
@@ -201,7 +202,7 @@ void lcd_display_task(void *pvParameters)
         case VIEW_POSITION:
         {
             lcd_printf_line(0, "Posicion carro:");
-            g_car_position_cm = g_car_position_pulses * 12 / 37200;
+            g_car_position_cm = 0.0f;
             lcd_printf_line(1, "%.1f cm", g_car_position_cm);
             break;
         }
@@ -209,11 +210,11 @@ void lcd_display_task(void *pvParameters)
         case VIEW_PID_GAINS:
         {
             // Obtenemos los valores actuales del módulo PID
-            float kp = pid_get_kp();
-            float ki = pid_get_ki();
+            float kp = 40.0f; // pid_get_kp();
+            float ki = 0.02f; // pid_get_ki();
             // Mostramos Kp y Ki en la misma línea
             lcd_printf_line(0, "Kp:%.2f Ki:%.2f", kp, ki);
-            float kd = pid_get_kd();
+            float kd = 1.0f; // pid_get_kd();
             lcd_printf_line(1, "Kd: %.2f", kd);
             break;
         }
