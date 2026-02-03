@@ -2,7 +2,7 @@
 #include <string.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
-#include "lcd_controller.h" // ¡Solo incluimos nuestro módulo!
+#include "lcd_without_i2c.h" // ¡Solo incluimos nuestro módulo!
 
 // La función principal de la aplicación
 void app_main(void)

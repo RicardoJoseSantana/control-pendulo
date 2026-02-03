@@ -6,7 +6,7 @@ Este repositorio contiene una colección de librerías modulares y reutilizables
 
 El objetivo principal es proporcionar bloques de construcción de software limpios y bien documentados para proyectos que incorporen encoder, motores de paso y pantallas lcd.
 
-Un agradecimiento especial al **Laboratorio de Instrumentación y Desarrollo Electrónico (LIDE)** por proporcionar los recursos y el espacio para la investigación y el desarrollo.
+Un agradecimiento especial al **Laboratorio de Investigación y Desarrollo Electrónico (LIDE)** por proporcionar los recursos y el espacio para la investigación y el desarrollo.
 
 ### Autores
 

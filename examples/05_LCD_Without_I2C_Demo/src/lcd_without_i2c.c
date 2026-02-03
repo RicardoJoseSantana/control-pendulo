@@ -1,4 +1,4 @@
-#include "lcd_controller.h"
+#include "lcd_without_i2c.h"
 #include <stdio.h>   // Para vsnprintf
 #include <stdarg.h>  // Para va_list, va_start, va_end
 #include <string.h>  // Necesario para memset
