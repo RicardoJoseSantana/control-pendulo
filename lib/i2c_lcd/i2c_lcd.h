@@ -1,48 +1,45 @@
 #ifndef I2C_LCD_H
 #define I2C_LCD_H
 
-#include <stdint.h> // Para usar tipos como uint8_t
+#include "esp_err.h"
+#include <stdint.h>
+
+// --- CONFIGURACIÓN DEL USUARIO (Hardware) ---
+#define LCD_ADDR 0x27             // Dirección I2C (comúnmente 0x27 o 0x3F)
+#define I2C_MASTER_SCL_IO 22      // GPIO SCL
+#define I2C_MASTER_SDA_IO 21      // GPIO SDA
+#define I2C_MASTER_NUM I2C_NUM_0  // Puerto I2C
+#define I2C_MASTER_FREQ_HZ 100000 // Frecuencia
+
+// --- Funciones Públicas ---
 
 /**
- * @brief Inicializa el hardware y la librería de la pantalla LCD.
- *
- * Debe ser llamada una vez al inicio del programa.
+ * @brief Inicializa el controlador I2C del ESP32 con los pines definidos.
+ * @return esp_err_t ESP_OK si fue exitoso.
  */
-void lcd_display_task(void *arg);
+esp_err_t lcd_i2c_controller_init(void);
 
+/**
+ * @brief Inicializa el LCD (secuencia de arranque y configuración 4-bit).
+ */
 void lcd_init(void);
 
 /**
- * @brief Limpia toda la pantalla y posiciona el cursor en (0, 0).
+ * @brief Envía una cadena de texto al LCD.
+ * @param str Cadena de caracteres a mostrar.
+ */
+void lcd_send_string(const char *str);
+
+/**
+ * @brief Mueve el cursor a una posición específica.
+ * @param row Fila (0 o 1).
+ * @param col Columna (0 a 15).
+ */
+void lcd_set_cursor(uint8_t row, uint8_t col);
+
+/**
+ * @brief Limpia la pantalla completa.
  */
 void lcd_clear(void);
 
-/**
- * @brief Posiciona el cursor en una columna y fila específicas.
- *
- * @param col La columna (0-19).
- * @param row La fila (0-3).
- */
-void lcd_set_cursor(uint8_t col, uint8_t row);
-
-/**
- * @brief Escribe una cadena de texto en la posición actual del cursor.
- *
- * @param str La cadena de texto a escribir.
- */
-void lcd_write_string(const char *str);
-
-/**
- * @brief Escribe una cadena formateada en una línea completa, rellenando con espacios.
- *
- * Se comporta como printf.
- * @param row La fila donde escribir (0-3).
- * @param format La cadena de formato (ej. "Contador: %d").
- * @param ... Los argumentos para la cadena de formato.
- */
-void lcd_printf_line(uint8_t row, const char *format, ...);
-
-// Declaración de la tarea de la visualizacion en pantalla
-void lcd_display_task(void *pvParameters);
-
-#endif 
+#endif // I2C_LCD_H

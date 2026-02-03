@@ -1,31 +1,28 @@
-// src/main.c
 #include <stdio.h>
-#include <string.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
-#include "button_handler.h" // Para la tarea de lectura del botón
-#include "freertos/queue.h" // Para la cola de comandos si desea añadir varias tareas
-#include "i2c_lcd.h"
-#include "system_status.h"
+#include "esp_log.h"
+#include "i2c_lcd.h" // Incluimos nuestra librería
 
-
-QueueHandle_t motor_command_queue;
+static const char *TAG = "APP_MAIN";
 
 void app_main(void)
 {
-  lcd_init();           // Inicializar la pantalla
+    // 1. Inicializar Hardware
+    ESP_ERROR_CHECK(lcd_i2c_controller_init());
+    ESP_LOGI(TAG, "Hardware I2C listo");
 
-  // Mensaje de bienvenida en la pantalla
-  lcd_clear();
-  lcd_printf_line(0, "Bienvenidos...");
-  lcd_printf_line(1, "Iniciando");
-  vTaskDelay(pdMS_TO_TICKS(1000));
+    // 2. Inicializar Pantalla
+    lcd_init();
 
-  // --------- Cada tarea se ejecutará de forma independiente y concurrente. ---------
+    // 3. Lógica de la aplicación
+    lcd_clear();
 
-  // Tarea que monitorea el botón BOOT y envía comandos de "repetir"
-  xTaskCreate(button_handler_task, "button_handler_task", configMINIMAL_STACK_SIZE * 3, NULL, 4, NULL);
+    lcd_set_cursor(0, 0);
+    lcd_send_string("Hola Mundo!");
 
-  // TAREA DE LA PANTALLA (Prioridad baja, no es crítica)
-  xTaskCreate(lcd_display_task, "LCDDisplay", 3072, NULL, 3, NULL);
+    lcd_set_cursor(1, 2);
+    lcd_send_string("Bienvenidos");
+
+    ESP_LOGI(TAG, "Pantalla actualizada.");
 }
